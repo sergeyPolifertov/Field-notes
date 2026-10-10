@@ -1,0 +1,26 @@
+# Виртуальные окружения
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Данные приложения (не коммитим заметки!)
+notes.json
+*.db
+*.sqlite
+
+# OS
+.DS_Store
+Thumbs.db
