@@ -7,9 +7,10 @@ from database import (
     get_all_notes, get_notes_by_category, search_notes, get_all_categories,
     add_note, delete_note, update_note, get_note_by_id
 )
-
+from fastapi.staticfiles import StaticFiles
 app = FastAPI(title="Мой Блокнот")
 templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 API_PASSWORD = "Trustno"
 

@@ -3,6 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- PWA -->
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#4CAF50">
+    <link rel="apple-touch-icon" href="/static/icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Мой Блокнот</title>
    <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -684,6 +690,20 @@ function toggleDarkMode(forceState) {
         }
 
         checkAuth();
+    </script>
+    <script>
+    // Регистрация сервис-воркера
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+            navigator.serviceWorker.register('/static/service-worker.js')
+                .then(function(reg) {
+                    console.log('Service Worker зарегистрирован:', reg.scope);
+                })
+                .catch(function(err) {
+                    console.log('Ошибка регистрации SW:', err);
+                });
+        });
+    }
     </script>
 </body>
 </html>
