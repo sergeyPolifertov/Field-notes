@@ -36,6 +36,21 @@ def get_all_notes():
     conn.close()
     return notes
 
+def search_notes(query: str):
+    """Поиск заметок по заголовку и содержимому"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    search_term = f"%{query}%"
+    cursor.execute(
+        '''SELECT * FROM notes 
+           WHERE title LIKE ? OR content LIKE ?
+           ORDER BY created_at DESC''',
+        (search_term, search_term)
+    )
+    notes = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return notes
+
 def add_note(title: str, content: str):
     """Добавить новую заметку"""
     conn = get_connection()

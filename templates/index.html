@@ -57,7 +57,7 @@
     </style>
 </head>
 <body>
-    <h1>📝 Мой Блокнот</h1>
+    <h1>📝 Полевые заметки </h1>
 
     <div id="login-section">
         <input type="password" id="password" placeholder="Введи пароль">
@@ -73,7 +73,9 @@
         <div id="error"></div>
 
         <h2 style="margin-top: 24px; margin-bottom: 12px;">Все заметки</h2>
+        <input type="text" id="search" placeholder="🔍 Поиск по заметкам..." oninput="onSearchInput()">
         <div id="notes"></div>
+        <button onclick="doLogout()" style="background:#999; margin-bottom:16px; padding:10px;">Выйти</button>
     </div>
 
     <script>
@@ -214,42 +216,64 @@
             document.getElementById('cancel-btn').style.display = 'none';
         }
 
-        function loadNotes() {
-            hideError();
-            fetch('/notes', {credentials: 'include'})
-            .then(function(response) {
-                if (response.status === 401) {
-                    showError('Сессия истекла, войди снова');
-                    eraseCookie('auth');
-                    location.reload();
-                    return [];
-                }
-                return response.json();
-            })
-            .then(function(notes) {
-                if (!notes) return;
-                var container = document.getElementById('notes');
-                if (notes.length === 0) {
+    var searchTimeout = null;
+
+    function onSearchInput() {
+        // Ждём 300мс после последнего символа, чтобы не спамить запросами
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(function() {
+            loadNotes();
+        }, 300);
+    }
+
+    function getSearchQuery() {
+        var searchInput = document.getElementById('search');
+        return searchInput ? searchInput.value : '';
+    }
+
+    function loadNotes() {
+        hideError();
+        var query = getSearchQuery();
+        var url = '/notes' + (query ? '?q=' + encodeURIComponent(query) : '');
+
+        fetch(url, {credentials: 'include'})
+        .then(function(response) {
+            if (response.status === 401) {
+                showError('Сессия истекла, войди снова');
+                eraseCookie('auth');
+                location.reload();
+                return [];
+            }
+            return response.json();
+        })
+        .then(function(notes) {
+            if (!notes) return;
+            var container = document.getElementById('notes');
+            if (notes.length === 0) {
+                if (query) {
+                    container.innerHTML = '<p style="color:#999; text-align:center;">Ничего не найдено по запросу "' + query + '"</p>';
+                } else {
                     container.innerHTML = '<p style="color:#999; text-align:center;">Заметок пока нет</p>';
-                    return;
                 }
-                container.innerHTML = notes.map(function(n) {
-                    var date = new Date(n.created_at).toLocaleString('ru-RU');
-                    return '<div class="note">' +
-                        '<h3>' + n.title + '</h3>' +
-                        '<div class="date">' + date + '</div>' +
-                        '<p>' + n.content + '</p>' +
-                        '<div class="buttons">' +
-                            '<button class="btn-edit" onclick="editNote(' + n.id + ', \'' + n.title.replace(/'/g, "\\'") + '\', \'' + n.content.replace(/'/g, "\\'").replace(/\n/g, "\\n") + '\')">Изменить</button>' +
-                            '<button class="btn-delete" onclick="deleteNote(' + n.id + ')">Удалить</button>' +
-                        '</div>' +
-                    '</div>';
-                }).join('');
-            })
-            .catch(function() {
-                showError('Ошибка загрузки заметок');
-            });
-        }
+                return;
+            }
+            container.innerHTML = notes.map(function(n) {
+                var date = new Date(n.created_at).toLocaleString('ru-RU');
+                return '<div class="note">' +
+                    '<h3>' + n.title + '</h3>' +
+                    '<div class="date">' + date + '</div>' +
+                    '<p>' + n.content + '</p>' +
+                    '<div class="buttons">' +
+                        '<button class="btn-edit" onclick="editNote(' + n.id + ', \'' + n.title.replace(/'/g, "\\'") + '\', \'' + n.content.replace(/'/g, "\\'").replace(/\n/g, "\\n") + '\')">Изменить</button>' +
+                        '<button class="btn-delete" onclick="deleteNote(' + n.id + ')">Удалить</button>' +
+                    '</div>' +
+                '</div>';
+            }).join('');
+        })
+        .catch(function() {
+            showError('Ошибка загрузки заметок');
+        });
+    }
 
         function deleteNote(id) {
             if (!confirm('Удалить заметку?')) return;
@@ -273,6 +297,25 @@
         }
 
         checkAuth();
+
+function doLogout() {
+    if (!confirm('Выйти из блокнота?')) return;
+
+    fetch('/logout', {
+        method: 'POST',
+        credentials: 'include'
+    })
+    .then(function() {
+        eraseCookie('auth');
+        location.reload();
+    })
+    .catch(function() {
+        // Даже если запрос не прошёл, всё равно выходим локально
+        eraseCookie('auth');
+        location.reload();
+    });
+}
+
     </script>
 </body>
 </html>

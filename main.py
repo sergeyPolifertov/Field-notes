@@ -3,10 +3,8 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from typing import Optional
-from database import (
-    get_all_notes, add_note, delete_note,
-    update_note, get_note_by_id
-)
+from database import (get_all_notes, add_note, delete_note, update_note, get_note_by_id,search_notes )
+
 
 app = FastAPI(title="Мой Блокнот API")
 templates = Jinja2Templates(directory="templates")
@@ -33,9 +31,15 @@ def login(login_req: LoginRequest):
     check_auth(login_req.password)
     return {"message": "Авторизация успешна"}
 
+
 @app.get("/notes")
-def get_notes(request: Request, auth: Optional[str] = Cookie(None)):
+def get_notes(request: Request, auth: Optional[str] = Cookie(None), q: str = ""):
     check_auth(auth)
+
+    if q.strip():
+        # Поиск по заголовку и содержимому (SQL LIKE)
+        return search_notes(q.strip())
+
     return get_all_notes()
 
 @app.post("/notes")
@@ -51,9 +55,15 @@ def delete_existing_note(note_id: int, request: Request, auth: Optional[str] = C
         return {"message": "Заметка удалена"}
     return {"message": "Заметка не найдена"}
 
+
 @app.put("/notes/{note_id}")
 def edit_note(note_id: int, note: Note, request: Request, auth: Optional[str] = Cookie(None)):
     check_auth(auth)
     if update_note(note_id, note.title, note.content):
         return {"message": "Заметка обновлена"}
     return {"message": "Заметка не найдена"}
+
+@app.post("/logout")
+def logout():
+    # Просто возвращаем успех — клиент сам удалит cookie
+    return {"message": "Выход выполнен"}
