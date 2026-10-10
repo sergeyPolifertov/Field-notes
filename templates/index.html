@@ -44,12 +44,13 @@
         }
         .note h3 { margin-bottom: 6px; color: #222; }
         .note p { color: #555; white-space: pre-wrap; }
-        .note button {
-            background: #f44336;
-            padding: 8px;
-            margin-top: 8px;
-        }
-        .note button:hover { background: #d32f2f; }
+        .note .date { font-size: 12px; color: #999; margin-bottom: 8px; }
+        .note .buttons { display: flex; gap: 8px; margin-top: 8px; }
+        .note .buttons button { flex: 1; padding: 8px; font-size: 14px; }
+        .btn-delete { background: #f44336 !important; }
+        .btn-delete:hover { background: #d32f2f !important; }
+        .btn-edit { background: #2196F3 !important; }
+        .btn-edit:hover { background: #1976D2 !important; }
         #error { color: red; margin-bottom: 12px; display: none; }
         #login-section { margin-bottom: 20px; padding: 12px; background: #fff3cd; border-radius: 8px; }
         #login-section.hidden { display: none; }
@@ -64,9 +65,11 @@
     </div>
 
     <div id="app-section" style="display: none;">
+        <input type="hidden" id="editing-id" value="">
         <input type="text" id="title" placeholder="Заголовок заметки">
         <textarea id="content" placeholder="Текст заметки..."></textarea>
-        <button onclick="saveNote()">Сохранить</button>
+        <button onclick="saveNote()" id="save-btn">Сохранить</button>
+        <button onclick="cancelEdit()" id="cancel-btn" style="display:none; background:#999; margin-top:8px;">Отменить редактирование</button>
         <div id="error"></div>
 
         <h2 style="margin-top: 24px; margin-bottom: 12px;">Все заметки</h2>
@@ -74,7 +77,6 @@
     </div>
 
     <script>
-        // Работа с cookies - имя должно совпадать с параметром в FastAPI (auth)
         function setCookie(name, value, days) {
             var expires = "";
             if (days) {
@@ -118,9 +120,7 @@
 
             fetch('/login', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({password: password})
             })
             .then(function(response) {
@@ -152,22 +152,24 @@
             hideError();
             var title = document.getElementById('title').value;
             var content = document.getElementById('content').value;
+            var editingId = document.getElementById('editing-id').value;
 
             if (!title || !content) {
                 showError('Заполни заголовок и текст!');
                 return;
             }
 
-            var btn = document.querySelector('#app-section button');
+            var btn = document.getElementById('save-btn');
             btn.disabled = true;
             btn.textContent = 'Сохранение...';
 
-            fetch('/notes', {
-                method: 'POST',
+            var url = editingId ? '/notes/' + editingId : '/notes';
+            var method = editingId ? 'PUT' : 'POST';
+
+            fetch(url, {
+                method: method,
                 credentials: 'include',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({title: title, content: content})
             })
             .then(function(response) {
@@ -178,6 +180,9 @@
                 } else if (response.ok) {
                     document.getElementById('title').value = '';
                     document.getElementById('content').value = '';
+                    document.getElementById('editing-id').value = '';
+                    document.getElementById('save-btn').textContent = 'Сохранить';
+                    document.getElementById('cancel-btn').style.display = 'none';
                     loadNotes();
                 } else {
                     showError('Ошибка сохранения');
@@ -188,15 +193,30 @@
             })
             .finally(function() {
                 btn.disabled = false;
-                btn.textContent = 'Сохранить';
+                btn.textContent = editingId ? 'Обновить' : 'Сохранить';
             });
+        }
+
+        function editNote(id, title, content) {
+            document.getElementById('title').value = title;
+            document.getElementById('content').value = content;
+            document.getElementById('editing-id').value = id;
+            document.getElementById('save-btn').textContent = 'Обновить';
+            document.getElementById('cancel-btn').style.display = 'block';
+            window.scrollTo(0, 0);
+        }
+
+        function cancelEdit() {
+            document.getElementById('title').value = '';
+            document.getElementById('content').value = '';
+            document.getElementById('editing-id').value = '';
+            document.getElementById('save-btn').textContent = 'Сохранить';
+            document.getElementById('cancel-btn').style.display = 'none';
         }
 
         function loadNotes() {
             hideError();
-            fetch('/notes', {
-                credentials: 'include'
-            })
+            fetch('/notes', {credentials: 'include'})
             .then(function(response) {
                 if (response.status === 401) {
                     showError('Сессия истекла, войди снова');
@@ -209,8 +229,21 @@
             .then(function(notes) {
                 if (!notes) return;
                 var container = document.getElementById('notes');
-                container.innerHTML = notes.map(function(n, index) {
-                    return '<div class="note"><h3>' + n.title + '</h3><p>' + n.content + '</p><button onclick="deleteNote(' + index + ')">Удалить</button></div>';
+                if (notes.length === 0) {
+                    container.innerHTML = '<p style="color:#999; text-align:center;">Заметок пока нет</p>';
+                    return;
+                }
+                container.innerHTML = notes.map(function(n) {
+                    var date = new Date(n.created_at).toLocaleString('ru-RU');
+                    return '<div class="note">' +
+                        '<h3>' + n.title + '</h3>' +
+                        '<div class="date">' + date + '</div>' +
+                        '<p>' + n.content + '</p>' +
+                        '<div class="buttons">' +
+                            '<button class="btn-edit" onclick="editNote(' + n.id + ', \'' + n.title.replace(/'/g, "\\'") + '\', \'' + n.content.replace(/'/g, "\\'").replace(/\n/g, "\\n") + '\')">Изменить</button>' +
+                            '<button class="btn-delete" onclick="deleteNote(' + n.id + ')">Удалить</button>' +
+                        '</div>' +
+                    '</div>';
                 }).join('');
             })
             .catch(function() {
@@ -218,10 +251,10 @@
             });
         }
 
-        function deleteNote(index) {
+        function deleteNote(id) {
             if (!confirm('Удалить заметку?')) return;
 
-            fetch('/notes/' + index, {
+            fetch('/notes/' + id, {
                 method: 'DELETE',
                 credentials: 'include'
             })
