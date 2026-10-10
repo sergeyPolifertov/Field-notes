@@ -12,8 +12,10 @@
             padding: 16px;
             max-width: 600px;
             margin: 0 auto;
+            padding-bottom: 80px; /* Отступ для плавающей кнопки */
         }
-        h1 { margin-bottom: 16px; color: #333; }
+        h1 { margin-bottom: 16px; color: #333; display: flex; justify-content: space-between; align-items: center; }
+        h1 span { font-size: 24px; }
         input, textarea, select {
             width: 100%;
             padding: 12px;
@@ -38,6 +40,8 @@
         button:disabled { background: #ccc; }
         .btn-edit { background: #2196F3 !important; }
         .btn-delete { background: #f44336 !important; }
+        .btn-settings { background: #607D8B !important; width: auto; padding: 8px 16px; font-size: 20px; }
+
         .note {
             background: white;
             padding: 12px;
@@ -60,11 +64,13 @@
         }
         .note .buttons { display: flex; gap: 8px; margin-top: 8px; }
         .note .buttons button { flex: 1; padding: 8px; font-size: 14px; }
+
         #error { color: red; margin-bottom: 12px; display: none; padding: 8px; background: #ffebee; border-radius: 4px; }
         #login-section { margin-bottom: 20px; padding: 12px; background: #fff3cd; border-radius: 8px; }
         #login-section.hidden { display: none; }
         #app-section { display: none; }
         #app-section.visible { display: block; }
+
         .filters {
             display: flex;
             gap: 6px;
@@ -91,9 +97,8 @@
             color: white;
             border-color: #4CAF50;
         }
-        .category-input-wrapper {
-            position: relative;
-        }
+
+        .category-input-wrapper { position: relative; }
         .category-suggestions {
             position: absolute;
             top: 100%;
@@ -109,17 +114,109 @@
             display: none;
         }
         .category-suggestions.show { display: block; }
-        .category-suggestion {
-            padding: 10px 12px;
-            cursor: pointer;
-            border-bottom: 1px solid #eee;
-        }
+        .category-suggestion { padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #eee; }
         .category-suggestion:hover { background: #f5f5f5; }
         .category-suggestion:last-child { border-bottom: none; }
+
+        /* Плавающая кнопка выхода */
+        .fab-logout {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            width: auto;
+            padding: 12px 24px;
+            background: #f44336;
+            color: white;
+            border-radius: 50px;
+            box-shadow: 0 4px 12px rgba(244, 67, 54, 0.4);
+            font-size: 16px;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .fab-logout:hover { background: #d32f2f; }
+
+        /* Модальное окно настроек */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-overlay.show { display: flex; }
+        .modal-content {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .modal-header h2 { font-size: 20px; }
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #999;
+            width: auto;
+            padding: 0;
+        }
+        .setting-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .setting-item:last-child { border-bottom: none; }
+
+        /* Переключатель (Toggle) */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 26px;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider { background-color: #4CAF50; }
+        input:checked + .slider:before { transform: translateX(24px); }
     </style>
 </head>
 <body>
-    <h1> Мой Блокнот</h1>
+    <h1>
+        <span>📝 Мой Блокнот</span>
+        <button class="btn-settings" onclick="openSettings()">⚙️</button>
+    </h1>
 
     <div id="login-section">
         <input type="password" id="password" placeholder="Введи пароль">
@@ -132,7 +229,7 @@
         <textarea id="content" placeholder="Текст заметки..."></textarea>
 
         <div class="category-input-wrapper">
-            <input type="text" id="category" placeholder="Категория (например: Авто, Работа, Дом)"
+            <input type="text" id="category" placeholder="Категория (Авто, Дача, Хобби или своя...)"
                    oninput="onCategoryInput()" onfocus="onCategoryInput()">
             <div id="category-suggestions" class="category-suggestions"></div>
         </div>
@@ -143,13 +240,37 @@
 
         <h2 style="margin-top: 24px; margin-bottom: 8px;">Все заметки</h2>
         <input type="text" id="search" placeholder="🔍 Поиск по заметкам..." oninput="onSearchInput()">
-
         <div id="filters" class="filters"></div>
-
         <div id="notes"></div>
+    </div>
 
-        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd;">
-            <button onclick="doLogout()" style="background:#999; padding:12px;">Выйти</button>
+    <!-- Плавающая кнопка выхода -->
+    <button class="fab-logout" onclick="doLogout()">🚪 Выйти</button>
+
+    <!-- Модальное окно настроек -->
+    <div id="settings-modal" class="modal-overlay" onclick="closeSettingsOnOverlay(event)">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>⚙️ Настройки</h2>
+                <button class="modal-close" onclick="closeSettings()">&times;</button>
+            </div>
+
+            <div class="setting-item">
+                <span>🌙 Тёмная тема</span>
+                <label class="switch">
+                    <input type="checkbox" id="dark-mode-toggle" onchange="toggleDarkMode()">
+                    <span class="slider"></span>
+                </label>
+            </div>
+
+            <div class="setting-item">
+                <span>📥 Экспорт заметок (JSON)</span>
+                <button style="width:auto; padding:8px 16px; font-size:14px;" onclick="exportNotes()">Скачать</button>
+            </div>
+
+            <p style="margin-top: 20px; font-size: 12px; color: #999; text-align: center;">
+                Версия 1.2 | Семейный блокнот
+            </p>
         </div>
     </div>
 
@@ -157,26 +278,16 @@
         var allCategories = [];
         var currentCategoryFilter = '';
         var searchTimeout = null;
+        var defaultCategories = ['Авто', 'Работа', 'Дом', 'Покупки', 'Личное', 'Здоровье', 'Идеи', 'Важное', 'Дача', 'Хобби'];
 
-        // Цвета для популярных категорий
         var categoryColors = {
-
-        'Авто': '#2196F3',
-        'Работа': '#607D8B',
-        'Дом': '#4CAF50',
-        'Покупки': '#FF9800',
-        'Личное': '#9C27B0',
-        'Здоровье': '#E91E63',
-        'Идеи': '#00BCD4',
-        'Важное': '#F44336',
-        'Дача': '#8BC34A',
-        'Хобби': '#FF5722'
-
+            'Авто': '#2196F3', 'Работа': '#607D8B', 'Дом': '#4CAF50', 'Покупки': '#FF9800',
+            'Личное': '#9C27B0', 'Здоровье': '#E91E63', 'Идеи': '#00BCD4', 'Важное': '#F44336',
+            'Дача': '#8BC34A', 'Хобби': '#FF5722'
         };
 
         function getCategoryColor(category) {
             if (categoryColors[category]) return categoryColors[category];
-            // Генерируем цвет по хешу названия
             var hash = 0;
             for (var i = 0; i < category.length; i++) {
                 hash = category.charCodeAt(i) + ((hash << 5) - hash);
@@ -217,13 +328,17 @@
                 document.getElementById('app-section').classList.add('visible');
                 loadCategories();
                 loadNotes();
+                // Проверка сохраненной темы
+                if (getCookie('dark_mode') === 'true') {
+                    document.getElementById('dark-mode-toggle').checked = true;
+                    toggleDarkMode(true);
+                }
             }
         }
 
         function savePassword() {
             var password = document.getElementById('password').value;
             if (!password) { alert('Введи пароль!'); return; }
-
             fetch('/login', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -236,9 +351,7 @@
                     document.getElementById('app-section').classList.add('visible');
                     loadCategories();
                     loadNotes();
-                } else {
-                    alert('Неверный пароль!');
-                }
+                } else { alert('Неверный пароль!'); }
             })
             .catch(function() { alert('Ошибка соединения'); });
         }
@@ -257,10 +370,7 @@
             err.textContent = msg;
             err.style.display = 'block';
         }
-
-        function hideError() {
-            document.getElementById('error').style.display = 'none';
-        }
+        function hideError() { document.getElementById('error').style.display = 'none'; }
 
         function loadCategories() {
             fetch('/categories', {credentials: 'include'})
@@ -272,21 +382,21 @@
             .catch(function() {});
         }
 
-    function renderFilters() {
-        var container = document.getElementById('filters');
-        var allCats = defaultCategories.concat(allCategories);
-        allCats = allCats.filter(function(c, i, arr) { return arr.indexOf(c) === i; });
+        function renderFilters() {
+            var container = document.getElementById('filters');
+            var allCats = defaultCategories.concat(allCategories);
+            allCats = allCats.filter(function(c, i, arr) { return arr.indexOf(c) === i; });
 
-        var html = '<button class="filter-btn ' + (currentCategoryFilter === '' ? 'active' : '') + '" onclick="setCategoryFilter(\'\')">Все</button>';
-        allCats.forEach(function(cat) {
-            var color = getCategoryColor(cat);
-            var isActive = currentCategoryFilter === cat ? 'active' : '';
-            html += '<button class="filter-btn ' + isActive + '" style="' +
-                    (isActive ? 'background:' + color + '; border-color:' + color + ';' : '') +
-                    '" onclick="setCategoryFilter(\'' + cat.replace(/'/g, "\\'") + '\')">' + cat + '</button>';
-        });
-        container.innerHTML = html;
-    }
+            var html = '<button class="filter-btn ' + (currentCategoryFilter === '' ? 'active' : '') + '" onclick="setCategoryFilter(\'\')">Все</button>';
+            allCats.forEach(function(cat) {
+                var color = getCategoryColor(cat);
+                var isActive = currentCategoryFilter === cat ? 'active' : '';
+                html += '<button class="filter-btn ' + isActive + '" style="' +
+                        (isActive ? 'background:' + color + '; border-color:' + color + ';' : '') +
+                        '" onclick="setCategoryFilter(\'' + cat.replace(/'/g, "\\'") + '\')">' + cat + '</button>';
+            });
+            container.innerHTML = html;
+        }
 
         function setCategoryFilter(category) {
             currentCategoryFilter = category;
@@ -294,46 +404,31 @@
             loadNotes();
         }
 
-// Предустановленные категории (всегда в подсказках)
-var defaultCategories = ['Авто', 'Работа', 'Дом', 'Покупки', 'Личное', 'Здоровье', 'Идеи', 'Важное', 'Дача', 'Хобби'];
+        function onCategoryInput() {
+            var input = document.getElementById('category');
+            var suggestions = document.getElementById('category-suggestions');
+            var value = input.value.toLowerCase().trim();
+            if (!value) { suggestions.classList.remove('show'); return; }
 
-    function onCategoryInput() {
-        var input = document.getElementById('category');
-        var suggestions = document.getElementById('category-suggestions');
-        var value = input.value.toLowerCase().trim();
+            var allCats = defaultCategories.concat(allCategories);
+            allCats = allCats.filter(function(c, i, arr) { return arr.indexOf(c) === i; });
 
-        if (!value) {
-            suggestions.classList.remove('show');
-            return;
+            var matches = allCats.filter(function(c) {
+                return c.toLowerCase().startsWith(value) && c.toLowerCase() !== value;
+            });
+
+            if (matches.length === 0) { suggestions.classList.remove('show'); return; }
+            suggestions.innerHTML = matches.map(function(c) {
+                return '<div class="category-suggestion" onclick="selectCategory(\'' + c.replace(/'/g, "\\'") + '\')">' + c + '</div>';
+            }).join('');
+            suggestions.classList.add('show');
         }
-
-        // Объединяем предустановленные и созданные категории
-        var allCats = defaultCategories.concat(allCategories);
-        // Убираем дубликаты
-        allCats = allCats.filter(function(c, i, arr) { return arr.indexOf(c) === i; });
-
-        // Ищем категории, начинающиеся с введённого текста
-        var matches = allCats.filter(function(c) {
-            return c.toLowerCase().startsWith(value) && c.toLowerCase() !== value;
-        });
-
-        if (matches.length === 0) {
-            suggestions.classList.remove('show');
-            return;
-        }
-
-        suggestions.innerHTML = matches.map(function(c) {
-            return '<div class="category-suggestion" onclick="selectCategory(\'' + c.replace(/'/g, "\\'") + '\')">' + c + '</div>';
-        }).join('');
-        suggestions.classList.add('show');
-    }
 
         function selectCategory(category) {
             document.getElementById('category').value = category;
             document.getElementById('category-suggestions').classList.remove('show');
         }
 
-        // Скрыть подсказки при клике вне
         document.addEventListener('click', function(e) {
             if (!e.target.closest('.category-input-wrapper')) {
                 document.getElementById('category-suggestions').classList.remove('show');
@@ -352,29 +447,23 @@ var defaultCategories = ['Авто', 'Работа', 'Дом', 'Покупки',
             var category = document.getElementById('category').value;
             var editingId = document.getElementById('editing-id').value;
 
-            if (!title || !content) {
-                showError('Заполни заголовок и текст!');
-                return;
-            }
+            if (!title || !content) { showError('Заполни заголовок и текст!'); return; }
 
             var btn = document.getElementById('save-btn');
-            btn.disabled = true;
-            btn.textContent = 'Сохранение...';
+            btn.disabled = true; btn.textContent = 'Сохранение...';
 
             var url = editingId ? '/notes/' + editingId : '/notes';
             var method = editingId ? 'PUT' : 'POST';
 
             fetch(url, {
-                method: method,
-                credentials: 'include',
+                method: method, credentials: 'include',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({title: title, content: content, category: category})
             })
             .then(function(response) {
                 if (response.status === 401) {
                     showError('Сессия истекла, войди снова');
-                    eraseCookie('auth');
-                    location.reload();
+                    eraseCookie('auth'); location.reload();
                 } else if (response.ok) {
                     document.getElementById('title').value = '';
                     document.getElementById('content').value = '';
@@ -382,11 +471,8 @@ var defaultCategories = ['Авто', 'Работа', 'Дом', 'Покупки',
                     document.getElementById('editing-id').value = '';
                     document.getElementById('save-btn').textContent = 'Сохранить';
                     document.getElementById('cancel-btn').style.display = 'none';
-                    loadCategories();
-                    loadNotes();
-                } else {
-                    showError('Ошибка сохранения');
-                }
+                    loadCategories(); loadNotes();
+                } else { showError('Ошибка сохранения'); }
             })
             .catch(function() { showError('Ошибка сети'); })
             .finally(function() {
@@ -426,8 +512,7 @@ var defaultCategories = ['Авто', 'Работа', 'Дом', 'Покупки',
             .then(function(response) {
                 if (response.status === 401) {
                     showError('Сессия истекла, войди снова');
-                    eraseCookie('auth');
-                    location.reload();
+                    eraseCookie('auth'); location.reload();
                     return [];
                 }
                 return response.json();
@@ -436,29 +521,20 @@ var defaultCategories = ['Авто', 'Работа', 'Дом', 'Покупки',
                 if (!notes) return;
                 var container = document.getElementById('notes');
                 if (notes.length === 0) {
-                    if (query || currentCategoryFilter) {
-                        container.innerHTML = '<p style="color:#999; text-align:center;">Ничего не найдено</p>';
-                    } else {
-                        container.innerHTML = '<p style="color:#999; text-align:center;">Заметок пока нет</p>';
-                    }
+                    container.innerHTML = '<p style="color:#999; text-align:center;">' + (query || currentCategoryFilter ? 'Ничего не найдено' : 'Заметок пока нет') + '</p>';
                     return;
                 }
                 container.innerHTML = notes.map(function(n) {
                     var date = new Date(n.created_at).toLocaleString('ru-RU');
-                    var categoryHtml = n.category ?
-                        '<span class="category-badge" style="background:' + getCategoryColor(n.category) + '">' + n.category + '</span>' : '';
+                    var categoryHtml = n.category ? '<span class="category-badge" style="background:' + getCategoryColor(n.category) + '">' + n.category + '</span>' : '';
                     return '<div class="note" style="border-left-color:' + (n.category ? getCategoryColor(n.category) : '#ccc') + '">' +
-                        '<div class="meta">' +
-                            categoryHtml +
-                            '<span class="date">' + date + '</span>' +
-                        '</div>' +
+                        '<div class="meta">' + categoryHtml + '<span class="date">' + date + '</span></div>' +
                         '<h3>' + n.title + '</h3>' +
                         '<p>' + n.content + '</p>' +
                         '<div class="buttons">' +
                             '<button class="btn-edit" onclick="editNote(' + n.id + ', \'' + n.title.replace(/'/g, "\\'") + '\', \'' + n.content.replace(/'/g, "\\'").replace(/\n/g, "\\n") + '\', \'' + (n.category || '').replace(/'/g, "\\'") + '\')">Изменить</button>' +
                             '<button class="btn-delete" onclick="deleteNote(' + n.id + ')">Удалить</button>' +
-                        '</div>' +
-                    '</div>';
+                        '</div></div>';
                 }).join('');
             })
             .catch(function() { showError('Ошибка загрузки заметок'); });
@@ -470,14 +546,66 @@ var defaultCategories = ['Авто', 'Работа', 'Дом', 'Покупки',
             .then(function(response) {
                 if (response.status === 401) {
                     showError('Сессия истекла, войди снова');
-                    eraseCookie('auth');
-                    location.reload();
+                    eraseCookie('auth'); location.reload();
                 } else if (response.ok) {
-                    loadCategories();
-                    loadNotes();
+                    loadCategories(); loadNotes();
                 }
             })
             .catch(function() { showError('Ошибка удаления'); });
+        }
+
+        // === НАСТРОЙКИ ===
+        function openSettings() {
+            document.getElementById('settings-modal').classList.add('show');
+        }
+
+        function closeSettings() {
+            document.getElementById('settings-modal').classList.remove('show');
+        }
+
+        function closeSettingsOnOverlay(event) {
+            if (event.target === document.getElementById('settings-modal')) {
+                closeSettings();
+            }
+        }
+
+        function toggleDarkMode(forceState) {
+            var isDark = forceState !== undefined ? forceState : document.getElementById('dark-mode-toggle').checked;
+            if (isDark) {
+                document.body.style.background = '#121212';
+                document.body.style.color = '#e0e0e0';
+                document.querySelectorAll('.note, .modal-content, input, textarea, .category-suggestions').forEach(el => {
+                    el.style.background = '#1e1e1e';
+                    el.style.color = '#e0e0e0';
+                    el.style.borderColor = '#333';
+                });
+                document.querySelectorAll('h1, h2, h3').forEach(el => el.style.color = '#fff');
+                setCookie('dark_mode', 'true', 365);
+            } else {
+                document.body.style.background = '#f5f5f5';
+                document.body.style.color = '#333';
+                document.querySelectorAll('.note, .modal-content, input, textarea, .category-suggestions').forEach(el => {
+                    el.style.background = 'white';
+                    el.style.color = '';
+                    el.style.borderColor = '#ddd';
+                });
+                document.querySelectorAll('h1, h2, h3').forEach(el => el.style.color = '');
+                setCookie('dark_mode', 'false', 365);
+            }
+        }
+
+        function exportNotes() {
+            fetch('/notes', {credentials: 'include'})
+            .then(r => r.json())
+            .then(notes => {
+                var dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(notes, null, 2));
+                var downloadAnchorNode = document.createElement('a');
+                downloadAnchorNode.setAttribute("href", dataStr);
+                downloadAnchorNode.setAttribute("download", "notes_backup_" + new Date().toISOString().slice(0,10) + ".json");
+                document.body.appendChild(downloadAnchorNode);
+                downloadAnchorNode.click();
+                downloadAnchorNode.remove();
+            });
         }
 
         checkAuth();
