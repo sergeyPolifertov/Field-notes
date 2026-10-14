@@ -27,7 +27,7 @@ def init_db():
         )
     ''')
 
-    # Таблица заметок (добавляем user_id)
+    # Таблица заметок (добавляем user_id и image)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS notes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,15 +35,16 @@ def init_db():
             title TEXT NOT NULL,
             content TEXT NOT NULL,
             category TEXT DEFAULT '',
+            image TEXT DEFAULT '',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )
     ''')
 
-    # Если таблица notes уже есть без user_id — добавляем поле
+    # Если таблица уже есть без поля image — добавляем его
     try:
-        cursor.execute('ALTER TABLE notes ADD COLUMN user_id INTEGER DEFAULT 1')
+        cursor.execute('ALTER TABLE notes ADD COLUMN image TEXT DEFAULT ""')
         conn.commit()
     except sqlite3.OperationalError:
         pass  # Поле уже существует
@@ -208,12 +209,12 @@ def get_all_categories(user_id: int):
     return categories
 
 
-def add_note(user_id: int, title: str, content: str, category: str = ""):
+def add_note(user_id: int, title: str, content: str, category: str = "", image: str = ""):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        'INSERT INTO notes (user_id, title, content, category) VALUES (?, ?, ?, ?)',
-        (user_id, title, content, category)
+        'INSERT INTO notes (user_id, title, content, category, image) VALUES (?, ?, ?, ?, ?)',
+        (user_id, title, content, category, image)
     )
     conn.commit()
     note_id = cursor.lastrowid
@@ -231,17 +232,26 @@ def delete_note(note_id: int, user_id: int):
     return deleted > 0
 
 
-def update_note(note_id: int, user_id: int, title: str, content: str, category: str = ""):
+def update_note(note_id: int, user_id: int, title: str, content: str, category: str = "", image: str = ""):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        'UPDATE notes SET title = ?, content = ?, category = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?',
-        (title, content, category, note_id, user_id)
+        'UPDATE notes SET title = ?, content = ?, category = ?, image = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?',
+        (title, content, category, image, note_id, user_id)
     )
     updated = cursor.rowcount
     conn.commit()
     conn.close()
     return updated > 0
+
+def get_note_image(note_id: int, user_id: int):
+    """Получить путь к картинке заметки"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT image FROM notes WHERE id = ? AND user_id = ?', (note_id, user_id))
+    row = cursor.fetchone()
+    conn.close()
+    return row['image'] if row else None
 
 
 init_db()

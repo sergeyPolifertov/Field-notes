@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Семейный Блокнот</title>
-    <!-- PWA -->
     <link rel="manifest" href="/static/manifest.json">
     <meta name="theme-color" content="#4CAF50">
     <link rel="apple-touch-icon" href="/static/icon-192.png">
@@ -51,13 +50,9 @@
         button:disabled { background: #ccc; }
         .btn-edit { background: #2196F3 !important; }
         .btn-delete { background: #f44336 !important; }
-        body.dark-mode .fab-logout {
-            background: #C62828 !important;
-            opacity: 0.85;
-            box-shadow: 0 4px 12px rgba(198, 40, 40, 0.3);}
-        body.dark-mode .fab-logout:hover {
-            opacity: 1;}
         .btn-settings { background: #607D8B !important; width: auto; padding: 8px 16px; font-size: 20px; }
+        .btn-upload { background: #9C27B0 !important; width: auto; padding: 10px 20px; font-size: 14px; margin-bottom: 8px; }
+        .btn-remove-image { background: #ff9800 !important; width: auto; padding: 6px 12px; font-size: 12px; margin-top: 8px; }
 
         .note {
             background: white;
@@ -80,17 +75,16 @@
             color: white;
             font-weight: 500;
         }
-        .note .buttons {
-            display: flex;
-            gap: 8px;
+        .note .buttons { display: flex; gap: 8px; margin-top: 8px; justify-content: flex-start; }
+        .note .buttons button { flex: none; width: auto; padding: 8px 16px; font-size: 14px; }
+
+        .note-image {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: 8px;
             margin-top: 8px;
-            justify-content: flex-start;
-        }
-        .note .buttons button {
-            flex: none;
-            width: auto;
-            padding: 8px 16px;
-            font-size: 14px;
+            cursor: pointer;
+            display: block;
         }
 
         #error { color: red; margin-bottom: 12px; display: none; padding: 8px; background: #ffebee; border-radius: 4px; }
@@ -169,6 +163,17 @@
         .category-suggestion { padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #eee; color: #333; }
         .category-suggestion:hover { background: #f5f5f5; }
         .category-suggestion:last-child { border-bottom: none; }
+
+        .image-upload-wrapper { margin-bottom: 12px; }
+        .image-preview {
+            max-width: 100%;
+            max-height: 200px;
+            border-radius: 8px;
+            margin-top: 8px;
+            display: none;
+        }
+        .image-preview.show { display: block; }
+        #file-input { display: none; }
 
         .fab-logout {
             position: fixed;
@@ -273,6 +278,23 @@
         }
         .user-info strong { color: #1976D2; }
 
+        .image-modal {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.9);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            cursor: pointer;
+        }
+        .image-modal.show { display: flex; }
+        .image-modal img {
+            max-width: 90%;
+            max-height: 90%;
+            border-radius: 8px;
+        }
+
         /* ТЁМНАЯ ТЕМА */
         body.dark-mode { background: #121212; color: #e0e0e0; }
         body.dark-mode h1, body.dark-mode h2, body.dark-mode h3 { color: #fff; }
@@ -297,19 +319,20 @@
         body.dark-mode .btn-edit:hover { opacity: 1; }
         body.dark-mode .btn-delete { background: #C62828 !important; opacity: 0.85; }
         body.dark-mode .btn-delete:hover { opacity: 1; }
-        body.dark-mode button:not(.btn-edit):not(.btn-delete):not(.fab-logout):not(.btn-settings):not(.modal-close):not(.filter-btn) {
+        body.dark-mode .fab-logout { background: #C62828 !important; opacity: 0.85; box-shadow: 0 4px 12px rgba(198, 40, 40, 0.3); }
+        body.dark-mode .fab-logout:hover { opacity: 1; }
+        body.dark-mode button:not(.btn-edit):not(.btn-delete):not(.fab-logout):not(.btn-settings):not(.modal-close):not(.filter-btn):not(.btn-upload):not(.btn-remove-image) {
             background: #2E7D32 !important; opacity: 0.9;
         }
-        body.dark-mode button:not(.btn-edit):not(.btn-delete):not(.fab-logout):not(.btn-settings):not(.modal-close):not(.filter-btn):hover { opacity: 1; }
+        body.dark-mode button:not(.btn-edit):not(.btn-delete):not(.fab-logout):not(.btn-settings):not(.modal-close):not(.filter-btn):not(.btn-upload):not(.btn-remove-image):hover { opacity: 1; }
     </style>
 </head>
 <body>
     <h1>
         <span>📝 Семейный Блокнот</span>
-        <button class="btn-settings" onclick="openSettings()">⚙️</button>
+        <button class="btn-settings" onclick="openSettings()">⚙️️</button>
     </h1>
 
-    <!-- Блок авторизации -->
     <div id="auth-section">
         <div class="tabs">
             <button class="tab active" onclick="showTab('login')">Вход</button>
@@ -333,7 +356,6 @@
         <div id="success"></div>
     </div>
 
-    <!-- Основное приложение -->
     <div id="app-section">
         <div class="user-info">
             <span>Привет, <strong id="current-username"></strong>!</span>
@@ -347,6 +369,14 @@
             <input type="text" id="category" placeholder="Категория (Авто, Дача, Хобби или своя...)"
                    oninput="onCategoryInput()" onfocus="onCategoryInput()">
             <div id="category-suggestions" class="category-suggestions"></div>
+        </div>
+
+        <!-- Загрузка картинки -->
+        <div class="image-upload-wrapper">
+            <input type="file" id="file-input" accept="image/*" onchange="onFileSelected(event)">
+            <button class="btn-upload" onclick="document.getElementById('file-input').click()">📷 Добавить фото</button>
+            <img id="image-preview" class="image-preview" alt="Превью">
+            <button id="btn-remove-preview" class="btn-remove-image" style="display:none;" onclick="removeImagePreview()">Удалить фото</button>
         </div>
 
         <button onclick="saveNote()" id="save-btn">Сохранить</button>
@@ -382,15 +412,21 @@
             </div>
 
             <p style="margin-top: 20px; font-size: 12px; color: #999; text-align: center;">
-                Семейный блокнот v2.0
+                Семейный блокнот v2.1
             </p>
         </div>
+    </div>
+
+    <!-- Модальное окно для просмотра картинки -->
+    <div id="image-modal" class="image-modal" onclick="closeImageModal()">
+        <img id="image-modal-img" src="" alt="Полный размер">
     </div>
 
     <script>
         var allCategories = [];
         var currentCategoryFilter = '';
         var searchTimeout = null;
+        var currentImageFilename = '';
         var defaultCategories = ['Авто', 'Работа', 'Дом', 'Покупки', 'Личное', 'Здоровье', 'Идеи', 'Важное', 'Дача', 'Хобби'];
 
         var categoryColors = {
@@ -437,7 +473,6 @@
         function showTab(tab) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.form-section').forEach(f => f.classList.remove('active'));
-
             if (tab === 'login') {
                 document.querySelectorAll('.tab')[0].classList.add('active');
                 document.getElementById('login-form').classList.add('active');
@@ -470,11 +505,7 @@
             hideMessages();
             var username = document.getElementById('login-username').value;
             var password = document.getElementById('login-password').value;
-
-            if (!username || !password) {
-                showError('Заполни все поля!');
-                return;
-            }
+            if (!username || !password) { showError('Заполни все поля!'); return; }
 
             fetch('/login', {
                 method: 'POST',
@@ -482,26 +513,19 @@
                 body: JSON.stringify({username: username, password: password})
             })
             .then(function(response) {
-                if (response.ok) {
-                    return response.json();
-                } else {
-                    return response.json().then(function(data) {
-                        throw new Error(data.detail || 'Ошибка входа');
-                    });
-                }
+                if (response.ok) return response.json();
+                else return response.json().then(function(data) { throw new Error(data.detail || 'Ошибка входа'); });
             })
             .then(function(data) {
                 setCookie('session_id', data.session_id, 30);
-                localStorage.setItem('username', username);  // Сохраняем имя
+                localStorage.setItem('username', username);
                 document.getElementById('auth-section').classList.add('hidden');
                 document.getElementById('app-section').classList.add('visible');
                 document.getElementById('current-username').textContent = username;
                 loadCategories();
                 loadNotes();
             })
-            .catch(function(err) {
-                showError(err.message);
-            });
+            .catch(function(err) { showError(err.message); });
         }
 
         function doRegister() {
@@ -509,21 +533,9 @@
             var username = document.getElementById('reg-username').value;
             var password = document.getElementById('reg-password').value;
             var password2 = document.getElementById('reg-password2').value;
-
-            if (!username || !password || !password2) {
-                showError('Заполни все поля!');
-                return;
-            }
-
-            if (password !== password2) {
-                showError('Пароли не совпадают!');
-                return;
-            }
-
-            if (password.length < 4) {
-                showError('Пароль должен быть не короче 4 символов!');
-                return;
-            }
+            if (!username || !password || !password2) { showError('Заполни все поля!'); return; }
+            if (password !== password2) { showError('Пароли не совпадают!'); return; }
+            if (password.length < 4) { showError('Пароль должен быть не короче 4 символов!'); return; }
 
             fetch('/register', {
                 method: 'POST',
@@ -531,34 +543,27 @@
                 body: JSON.stringify({username: username, password: password})
             })
             .then(function(response) {
-                if (response.ok) {
-                    return response.json();
-                } else {
-                    return response.json().then(function(data) {
-                        throw new Error(data.detail || 'Ошибка регистрации');
-                    });
-                }
+                if (response.ok) return response.json();
+                else return response.json().then(function(data) { throw new Error(data.detail || 'Ошибка регистрации'); });
             })
             .then(function(data) {
                 setCookie('session_id', data.session_id, 30);
-                localStorage.setItem('username', username);  // Сохраняем имя
+                localStorage.setItem('username', username);
                 document.getElementById('auth-section').classList.add('hidden');
                 document.getElementById('app-section').classList.add('visible');
                 document.getElementById('current-username').textContent = username;
                 loadCategories();
                 loadNotes();
             })
-            .catch(function(err) {
-                showError(err.message);
-            });
+            .catch(function(err) { showError(err.message); });
         }
 
         function doLogout() {
             if (!confirm('Выйти из блокнота?')) return;
             fetch('/logout', { method: 'POST', credentials: 'include' })
             .finally(function() {
-                localStorage.removeItem('username');
                 eraseCookie('session_id');
+                localStorage.removeItem('username');
                 location.reload();
             });
         }
@@ -566,18 +571,13 @@
         function checkAuth() {
             var sessionId = getCookie('session_id');
             var savedUsername = localStorage.getItem('username');
-
             if (sessionId && savedUsername) {
                 fetch('/me', {credentials: 'include'})
                 .then(function(response) {
-                    if (response.ok) {
-                        return response.json();
-                    } else {
-                        throw new Error('Сессия невалидна');
-                    }
+                    if (response.ok) return response.json();
+                    else throw new Error('Сессия невалидна');
                 })
                 .then(function(data) {
-                    // Обновляем имя из ответа сервера (на случай если оно изменилось)
                     localStorage.setItem('username', data.username);
                     document.getElementById('current-username').textContent = data.username;
                     document.getElementById('auth-section').classList.add('hidden');
@@ -586,7 +586,6 @@
                     loadNotes();
                 })
                 .catch(function() {
-                    // Сессия истекла — очищаем
                     eraseCookie('session_id');
                     localStorage.removeItem('username');
                 });
@@ -607,7 +606,6 @@
             var container = document.getElementById('filters');
             var allCats = defaultCategories.concat(allCategories);
             allCats = allCats.filter(function(c, i, arr) { return arr.indexOf(c) === i; });
-
             var html = '<button class="filter-btn ' + (currentCategoryFilter === '' ? 'active' : '') + '" onclick="setCategoryFilter(\'\')">Все</button>';
             allCats.forEach(function(cat) {
                 var color = getCategoryColor(cat);
@@ -630,14 +628,11 @@
             var suggestions = document.getElementById('category-suggestions');
             var value = input.value.toLowerCase().trim();
             if (!value) { suggestions.classList.remove('show'); return; }
-
             var allCats = defaultCategories.concat(allCategories);
             allCats = allCats.filter(function(c, i, arr) { return arr.indexOf(c) === i; });
-
             var matches = allCats.filter(function(c) {
                 return c.toLowerCase().startsWith(value) && c.toLowerCase() !== value;
             });
-
             if (matches.length === 0) { suggestions.classList.remove('show'); return; }
             suggestions.innerHTML = matches.map(function(c) {
                 return '<div class="category-suggestion" onclick="selectCategory(\'' + c.replace(/'/g, "\\'") + '\')">' + c + '</div>';
@@ -661,34 +656,92 @@
             searchTimeout = setTimeout(loadNotes, 300);
         }
 
+        // === РАБОТА С КАРТИНКАМИ ===
+
+        function onFileSelected(event) {
+            var file = event.target.files[0];
+            if (!file) return;
+            if (file.size > 5 * 1024 * 1024) {
+                showError('Файл слишком большой (макс. 5 МБ)');
+                return;
+            }
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                var preview = document.getElementById('image-preview');
+                preview.src = e.target.result;
+                preview.classList.add('show');
+                document.getElementById('btn-remove-preview').style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+            var formData = new FormData();
+            formData.append('file', file);
+            fetch('/upload', {
+                method: 'POST',
+                credentials: 'include',
+                body: formData
+            })
+            .then(function(response) {
+                if (response.ok) return response.json();
+                else return response.json().then(function(data) { throw new Error(data.detail || 'Ошибка загрузки'); });
+            })
+            .then(function(data) {
+                currentImageFilename = data.filename;
+            })
+            .catch(function(err) {
+                showError(err.message);
+                removeImagePreview();
+            });
+        }
+
+        function removeImagePreview() {
+            document.getElementById('image-preview').src = '';
+            document.getElementById('image-preview').classList.remove('show');
+            document.getElementById('btn-remove-preview').style.display = 'none';
+            document.getElementById('file-input').value = '';
+            currentImageFilename = '';
+        }
+
+        function openImageModal(src) {
+            document.getElementById('image-modal-img').src = src;
+            document.getElementById('image-modal').classList.add('show');
+        }
+
+        function closeImageModal() {
+            document.getElementById('image-modal').classList.remove('show');
+        }
+
+        function removeNoteImage(noteId) {
+            if (!confirm('Удалить картинку из заметки?')) return;
+            fetch('/notes/' + noteId + '/image', {
+                method: 'DELETE',
+                credentials: 'include'
+            })
+            .then(function(response) {
+                if (response.ok) loadNotes();
+            })
+            .catch(function() { showError('Ошибка удаления картинки'); });
+        }
+
         function saveNote() {
             hideMessages();
             var title = document.getElementById('title').value;
             var content = document.getElementById('content').value;
             var category = document.getElementById('category').value;
             var editingId = document.getElementById('editing-id').value;
-
-            if (!title || !content) {
-                showError('Заполни заголовок и текст!');
-                return;
-            }
-
+            if (!title || !content) { showError('Заполни заголовок и текст!'); return; }
             var btn = document.getElementById('save-btn');
             btn.disabled = true; btn.textContent = 'Сохранение...';
-
             var url = editingId ? '/notes/' + editingId : '/notes';
             var method = editingId ? 'PUT' : 'POST';
-
             fetch(url, {
                 method: method, credentials: 'include',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({title: title, content: content, category: category})
+                body: JSON.stringify({title: title, content: content, category: category, image: currentImageFilename})
             })
             .then(function(response) {
                 if (response.status === 401) {
                     showError('Сессия истекла, войди снова');
-                    eraseCookie('session_id');
-                    location.reload();
+                    eraseCookie('session_id'); location.reload();
                 } else if (response.ok) {
                     document.getElementById('title').value = '';
                     document.getElementById('content').value = '';
@@ -696,10 +749,10 @@
                     document.getElementById('editing-id').value = '';
                     document.getElementById('save-btn').textContent = 'Сохранить';
                     document.getElementById('cancel-btn').style.display = 'none';
+                    currentImageFilename = '';
+                    removeImagePreview();
                     loadCategories(); loadNotes();
-                } else {
-                    showError('Ошибка сохранения');
-                }
+                } else { showError('Ошибка сохранения'); }
             })
             .catch(function() { showError('Ошибка сети'); })
             .finally(function() {
@@ -708,13 +761,22 @@
             });
         }
 
-        function editNote(id, title, content, category) {
+        function editNote(id, title, content, category, image) {
             document.getElementById('title').value = title;
             document.getElementById('content').value = content;
             document.getElementById('category').value = category || '';
             document.getElementById('editing-id').value = id;
             document.getElementById('save-btn').textContent = 'Обновить';
             document.getElementById('cancel-btn').style.display = 'block';
+            if (image) {
+                currentImageFilename = image;
+                var preview = document.getElementById('image-preview');
+                preview.src = '/uploads/' + image;
+                preview.classList.add('show');
+                document.getElementById('btn-remove-preview').style.display = 'block';
+            } else {
+                removeImagePreview();
+            }
             window.scrollTo(0, 0);
         }
 
@@ -725,6 +787,7 @@
             document.getElementById('editing-id').value = '';
             document.getElementById('save-btn').textContent = 'Сохранить';
             document.getElementById('cancel-btn').style.display = 'none';
+            removeImagePreview();
         }
 
         function loadNotes() {
@@ -734,13 +797,11 @@
             if (query) params.push('q=' + encodeURIComponent(query));
             if (currentCategoryFilter) params.push('category=' + encodeURIComponent(currentCategoryFilter));
             var url = '/notes' + (params.length ? '?' + params.join('&') : '');
-
             fetch(url, {credentials: 'include'})
             .then(function(response) {
                 if (response.status === 401) {
                     showError('Сессия истекла, войди снова');
-                    eraseCookie('session_id');
-                    location.reload();
+                    eraseCookie('session_id'); location.reload();
                     return [];
                 }
                 return response.json();
@@ -755,12 +816,14 @@
                 container.innerHTML = notes.map(function(n) {
                     var date = new Date(n.created_at).toLocaleString('ru-RU');
                     var categoryHtml = n.category ? '<span class="category-badge" style="background:' + getCategoryColor(n.category) + '">' + n.category + '</span>' : '';
+                    var imageHtml = n.image ? '<img class="note-image" src="/uploads/' + n.image + '" onclick="openImageModal(\'/uploads/' + n.image + '\')"><button class="btn-remove-image" onclick="removeNoteImage(' + n.id + ')">Удалить фото</button>' : '';
                     return '<div class="note" style="border-left-color:' + (n.category ? getCategoryColor(n.category) : '#ccc') + '">' +
                         '<div class="meta">' + categoryHtml + '<span class="date">' + date + '</span></div>' +
                         '<h3>' + n.title + '</h3>' +
                         '<p>' + n.content + '</p>' +
+                        imageHtml +
                         '<div class="buttons">' +
-                            '<button class="btn-edit" onclick="editNote(' + n.id + ', \'' + n.title.replace(/'/g, "\\'") + '\', \'' + n.content.replace(/'/g, "\\'").replace(/\n/g, "\\n") + '\', \'' + (n.category || '').replace(/'/g, "\\'") + '\')">Изменить</button>' +
+                            '<button class="btn-edit" onclick="editNote(' + n.id + ', \'' + n.title.replace(/'/g, "\\'") + '\', \'' + n.content.replace(/'/g, "\\'").replace(/\n/g, "\\n") + '\', \'' + (n.category || '').replace(/'/g, "\\'") + '\', \'' + (n.image || '').replace(/'/g, "\\'") + '\')">Изменить</button>' +
                             '<button class="btn-delete" onclick="deleteNote(' + n.id + ')">Удалить</button>' +
                         '</div></div>';
                 }).join('');
@@ -774,8 +837,7 @@
             .then(function(response) {
                 if (response.status === 401) {
                     showError('Сессия истекла, войди снова');
-                    eraseCookie('session_id');
-                    location.reload();
+                    eraseCookie('session_id'); location.reload();
                 } else if (response.ok) {
                     loadCategories(); loadNotes();
                 }
@@ -786,17 +848,12 @@
         function openSettings() {
             document.getElementById('settings-modal').classList.add('show');
         }
-
         function closeSettings() {
             document.getElementById('settings-modal').classList.remove('show');
         }
-
         function closeSettingsOnOverlay(event) {
-            if (event.target === document.getElementById('settings-modal')) {
-                closeSettings();
-            }
+            if (event.target === document.getElementById('settings-modal')) closeSettings();
         }
-
         function toggleDarkMode(forceState) {
             var isDark = forceState !== undefined ? forceState : document.getElementById('dark-mode-toggle').checked;
             if (isDark) {
@@ -807,28 +864,22 @@
                 setCookie('dark_mode', 'false', 365);
             }
         }
-
         function exportNotes() {
             fetch('/notes', {credentials: 'include'})
             .then(r => r.json())
             .then(notes => {
                 var dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(notes, null, 2));
-                var downloadAnchorNode = document.createElement('a');
-                downloadAnchorNode.setAttribute("href", dataStr);
-                downloadAnchorNode.setAttribute("download", "notes_backup_" + new Date().toISOString().slice(0,10) + ".json");
-                document.body.appendChild(downloadAnchorNode);
-                downloadAnchorNode.click();
-                downloadAnchorNode.remove();
+                var a = document.createElement('a');
+                a.setAttribute("href", dataStr);
+                a.setAttribute("download", "notes_backup_" + new Date().toISOString().slice(0,10) + ".json");
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
             });
         }
 
-        // Проверяем авторизацию при загрузке
         var sessionId = getCookie('session_id');
-        if (sessionId) {
-            checkAuth();
-        }
-
-        // Проверяем сохраненную тему
+        if (sessionId) checkAuth();
         if (getCookie('dark_mode') === 'true') {
             document.getElementById('dark-mode-toggle').checked = true;
             document.body.classList.add('dark-mode');

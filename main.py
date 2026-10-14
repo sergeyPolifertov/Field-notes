@@ -1,6 +1,7 @@
-from fastapi import FastAPI, HTTPException, Request, Cookie
+from fastapi import FastAPI, HTTPException, Request, Cookie, UploadFile, File
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -8,11 +9,15 @@ from database import (
     create_user, get_user_by_username, get_user_by_id,
     create_session, get_session, delete_session,
     get_all_notes, get_notes_by_category, search_notes, get_all_categories,
-    add_note, delete_note, update_note
+    add_note, delete_note, update_note, get_note_image
 )
+import os
+import uuid
 
 app = FastAPI(title="Семейный Блокнот")
 templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 
 # === Модели ===
@@ -31,6 +36,7 @@ class Note(BaseModel):
     title: str
     content: str
     category: str = ""
+    image: str = ""
 
 
 # === Вспомогательные функции ===
@@ -91,6 +97,7 @@ def logout(session_id: Optional[str] = Cookie(None)):
         delete_session(session_id)
     return {"message": "Выход выполнен"}
 
+
 @app.get("/me")
 def get_me(session_id: Optional[str] = Cookie(None)):
     user = get_current_user(session_id)
@@ -98,6 +105,56 @@ def get_me(session_id: Optional[str] = Cookie(None)):
         raise HTTPException(status_code=401, detail="Не авторизован")
     return {"username": user['username']}
 
+
+# === Загрузка файлов ===
+
+@app.post("/upload")
+@app.post("/upload")
+def upload_image(file: UploadFile = File(...), session_id: Optional[str] = Cookie(None)):
+    user = get_current_user(session_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="Не авторизован")
+
+    allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Только изображения (jpg, png, gif, webp)")
+
+    file_content = file.file.read()
+    if len(file_content) > 10 * 1024 * 1024:  # Увеличили лимит до 10 МБ (до сжатия)
+        raise HTTPException(status_code=400, detail="Файл слишком большой (макс. 10 МБ)")
+
+    # Генерируем уникальное имя файла
+    ext = file.filename.split('.')[-1].lower()
+    filename = f"{uuid.uuid4().hex}.jpg"  # Всегда сохраняем как JPG для сжатия
+    filepath = os.path.join("uploads", filename)
+
+    # Сжимаем картинку через Pillow
+    from PIL import Image
+    import io
+
+    try:
+        img = Image.open(io.BytesIO(file_content))
+
+        # Конвертируем в RGB (если PNG с прозрачностью или RGBA)
+        if img.mode in ('RGBA', 'P', 'LA'):
+            img = img.convert('RGB')
+
+        # Ресайз: если длинная сторона больше 1920px — уменьшаем
+        max_size = 1920
+        if max(img.size) > max_size:
+            ratio = max_size / max(img.size)
+            new_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
+            img = img.resize(new_size, Image.Resampling.LANCZOS)
+
+        # Сохраняем с качеством 85% (оптимальный баланс качество/размер)
+        img.save(filepath, 'JPEG', quality=85, optimize=True)
+
+    except Exception as e:
+        # Если не удалось сжать — сохраняем оригинал
+        with open(filepath, "wb") as f:
+            f.write(file_content)
+
+    return {"filename": filename, "url": f"/uploads/{filename}"}
 
 # === Заметки ===
 
@@ -126,7 +183,7 @@ def add_new_note(note: Note, request: Request, session_id: Optional[str] = Cooki
     user = get_current_user(session_id)
     if not user:
         raise HTTPException(status_code=401, detail="Не авторизован")
-    note_id = add_note(user['id'], note.title, note.content, note.category)
+    note_id = add_note(user['id'], note.title, note.content, note.category, note.image)
     return {"message": "Заметка сохранена!", "id": note_id}
 
 
@@ -145,6 +202,30 @@ def edit_note(note_id: int, note: Note, request: Request, session_id: Optional[s
     user = get_current_user(session_id)
     if not user:
         raise HTTPException(status_code=401, detail="Не авторизован")
-    if update_note(note_id, user['id'], note.title, note.content, note.category):
+    if update_note(note_id, user['id'], note.title, note.content, note.category, note.image):
         return {"message": "Заметка обновлена"}
     return {"message": "Заметка не найдена"}
+
+
+@app.delete("/notes/{note_id}/image")
+def delete_note_image(note_id: int, request: Request, session_id: Optional[str] = Cookie(None)):
+    user = get_current_user(session_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="Не авторизован")
+
+    image_path = get_note_image(note_id, user['id'])
+    if image_path:
+        filepath = os.path.join("uploads", image_path)
+        if os.path.exists(filepath):
+            os.remove(filepath)
+
+        from database import get_connection
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT title, content, category FROM notes WHERE id = ? AND user_id = ?', (note_id, user['id']))
+        row = cursor.fetchone()
+        if row:
+            update_note(note_id, user['id'], row['title'], row['content'], row['category'], "")
+        conn.close()
+        return {"message": "Картинка удалена"}
+    return {"message": "Картинка не найдена"}
