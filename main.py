@@ -91,6 +91,13 @@ def logout(session_id: Optional[str] = Cookie(None)):
         delete_session(session_id)
     return {"message": "Выход выполнен"}
 
+@app.get("/me")
+def get_me(session_id: Optional[str] = Cookie(None)):
+    user = get_current_user(session_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="Не авторизован")
+    return {"username": user['username']}
+
 
 # === Заметки ===
 
