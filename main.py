@@ -1,3 +1,12 @@
+from database import (
+    create_user, get_user_by_username, get_user_by_email, get_user_by_id, get_all_users,
+    create_session, get_session, delete_session,
+    create_reset_token, get_user_by_reset_token, delete_reset_token, update_user_password,
+    get_all_notes_for_user, get_notes_by_category_for_user, search_notes_for_user, get_all_categories,
+    add_note, delete_note, update_note, get_note_by_id, get_note_image,
+    share_note_with_users, get_shared_users, set_note_public,
+    get_profile, create_profile, update_profile  # ← ДОБАВЛЕНО
+)
 import os
 import uuid
 import smtplib
@@ -27,7 +36,7 @@ app = FastAPI(title="Семейный Блокнот")
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
-
+app.mount("/avatars", StaticFiles(directory="avatars"), name="avatars")
 
 # === Отправка почты ===
 def send_email(to_email: str, subject: str, html_content: str):
@@ -90,6 +99,10 @@ class Note(BaseModel):
 class ShareRequest(BaseModel):
     user_ids: List[int] = []
     is_public: int = 0
+
+class ProfileUpdate(BaseModel):
+    bio: str = ""
+    avatar: str = ""
 
 
 # === Вспомогательные ===
@@ -165,6 +178,82 @@ def get_me(session_id: Optional[str] = Cookie(None)):
     user = get_current_user(session_id)
     if not user: raise HTTPException(status_code=401, detail="Не авторизован")
     return {"id": user['id'], "username": user['username']}
+
+
+# === Профили ===
+
+@app.get("/profile")
+def get_user_profile(session_id: Optional[str] = Cookie(None)):
+    user = get_current_user(session_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="Не авторизован")
+    profile = get_profile(user['id'])
+    if not profile:
+        create_profile(user['id'])
+        profile = get_profile(user['id'])
+    return {**user, **profile}
+
+
+@app.put("/profile")
+def update_user_profile(profile_data: ProfileUpdate, session_id: Optional[str] = Cookie(None)):
+    user = get_current_user(session_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="Не авторизован")
+
+    bio = profile_data.bio[:200] if profile_data.bio else ""
+
+    # Обновляем только bio, аватарку не трогаем
+    update_profile(user['id'], bio=bio)
+    return {"message": "Профиль обновлён"}
+
+
+@app.post("/upload-avatar")
+def upload_avatar(file: UploadFile = File(...), session_id: Optional[str] = Cookie(None)):
+    user = get_current_user(session_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="Не авторизован")
+
+    allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+    if file.content_type not in allowed:
+        raise HTTPException(status_code=400, detail="Только изображения (jpg, png, gif, webp)")
+
+    file_content = file.file.read()
+    if len(file_content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Файл слишком большой (макс. 5 МБ)")
+
+    ext = file.filename.split('.')[-1].lower()
+    filename = f"avatar_{uuid.uuid4().hex}.jpg"
+    filepath = os.path.join("avatars", filename)  # ← ИЗМЕНЕНО: было "uploads"
+
+    from PIL import Image
+    import io
+    try:
+        img = Image.open(io.BytesIO(file_content))
+        if img.mode in ('RGBA', 'P', 'LA'):
+            img = img.convert('RGB')
+        img = img.resize((400, 400), Image.Resampling.LANCZOS)
+        img.save(filepath, 'JPEG', quality=85, optimize=True)
+    except Exception:
+        with open(filepath, "wb") as f:
+            f.write(file_content)
+
+    # Обновляем профиль
+    profile = get_profile(user['id'])
+    if not profile:
+        create_profile(user['id'])
+
+    # Удаляем старую аватарку если есть
+    if profile and profile.get('avatar'):
+        old_filepath = os.path.join("avatars", profile['avatar'])  # ← ИЗМЕНЕНО
+        if os.path.exists(old_filepath):
+            try:
+                os.remove(old_filepath)
+            except:
+                pass
+
+    update_profile(user['id'], avatar=filename)
+
+    return {"filename": filename, "url": f"/avatars/{filename}"}  # ← ИЗМЕНЕНО
 
 
 # === Сброс пароля ===

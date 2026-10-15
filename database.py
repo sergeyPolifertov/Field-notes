@@ -97,6 +97,19 @@ def init_db():
         )
     ''')
 
+    # Таблица профилей
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS profiles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER UNIQUE NOT NULL,
+            avatar TEXT DEFAULT '',
+            bio TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    ''')
+
     conn.commit()
     conn.close()
     print("✅ База данных инициализирована")
@@ -107,10 +120,12 @@ def create_user(username: str, email: str, password_hash: str):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute('INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)',
-                       (username, email, password_hash))
+        cursor.execute('INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)', (username, email, password_hash))
+        user_id = cursor.lastrowid
+        # Автоматически создаём профиль
+        cursor.execute('INSERT INTO profiles (user_id) VALUES (?)', (user_id,))
         conn.commit()
-        return cursor.lastrowid
+        return user_id
     except sqlite3.IntegrityError:
         return None
     finally:
@@ -418,5 +433,58 @@ def set_note_public(note_id: int, owner_id: int, is_public: int):
     conn.close()
     return updated > 0
 
+
+# === Профили ===
+
+def get_profile(user_id: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM profiles WHERE user_id = ?', (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+def create_profile(user_id: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute('INSERT INTO profiles (user_id) VALUES (?)', (user_id,))
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False
+    finally:
+        conn.close()
+
+
+def update_profile(user_id: int, bio: str = None, avatar: str = None):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Собираем только те поля, которые переданы (не None)
+    updates = []
+    params = []
+
+    if bio is not None:
+        updates.append('bio = ?')
+        params.append(bio)
+
+    if avatar is not None:
+        updates.append('avatar = ?')
+        params.append(avatar)
+
+    if not updates:
+        conn.close()
+        return False
+
+    updates.append('updated_at = CURRENT_TIMESTAMP')
+    params.append(user_id)
+
+    query = 'UPDATE profiles SET ' + ', '.join(updates) + ' WHERE user_id = ?'
+    cursor.execute(query, params)
+    updated = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return updated > 0
 
 init_db()
