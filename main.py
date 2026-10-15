@@ -63,22 +63,31 @@ async def home(request: Request, session_id: Optional[str] = Cookie(None)):
 def register(req: RegisterRequest):
     if len(req.password) < 4:
         raise HTTPException(status_code=400, detail="Пароль должен быть не короче 4 символов")
+
+    # Приводим имя к нижнему регистру
+    username = req.username.lower().strip()
+
+    if not username:
+        raise HTTPException(status_code=400, detail="Имя пользователя не может быть пустым")
+
     password_hash = generate_password_hash(req.password)
-    user_id = create_user(req.username, password_hash)
+    user_id = create_user(username, password_hash)
     if user_id is None:
         raise HTTPException(status_code=400, detail="Имя пользователя уже занято")
+
     session_id = create_session(user_id)
-    return {"message": "Регистрация успешна", "session_id": session_id}
+    return {"message": "Регистрация успешна", "session_id": session_id, "user_id": user_id, "username": username}
 
 @app.post("/login")
 def login(req: LoginRequest):
-    user = get_user_by_username(req.username)
+    username = req.username.lower().strip()
+    user = get_user_by_username(username)
     if not user:
         raise HTTPException(status_code=401, detail="Неверное имя пользователя или пароль")
     if not check_password_hash(user['password_hash'], req.password):
         raise HTTPException(status_code=401, detail="Неверное имя пользователя или пароль")
     session_id = create_session(user['id'])
-    return {"message": "Вход выполнен", "session_id": session_id}
+    return {"message": "Вход выполнен", "session_id": session_id, "user_id": user['id'], "username": user['username']}
 
 @app.post("/logout")
 def logout(session_id: Optional[str] = Cookie(None)):

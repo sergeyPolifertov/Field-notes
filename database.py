@@ -96,8 +96,10 @@ def init_db():
 def create_user(username: str, password_hash: str):
     conn = get_connection()
     cursor = conn.cursor()
+    # Приводим имя к нижнему регистру для уникальности
+    username_lower = username.lower()
     try:
-        cursor.execute('INSERT INTO users (username, password_hash) VALUES (?, ?)', (username, password_hash))
+        cursor.execute('INSERT INTO users (username, password_hash) VALUES (?, ?)', (username_lower, password_hash))
         conn.commit()
         return cursor.lastrowid
     except sqlite3.IntegrityError:
@@ -109,7 +111,8 @@ def create_user(username: str, password_hash: str):
 def get_user_by_username(username: str):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute('SELECT * FROM users WHERE username = ?', (username,))
+    # Ищем без учёта регистра
+    cursor.execute('SELECT * FROM users WHERE LOWER(username) = ?', (username.lower(),))
     row = cursor.fetchone()
     conn.close()
     return dict(row) if row else None
