@@ -288,12 +288,72 @@
             z-index: 2000;
             cursor: pointer;
         }
+
+        .share-modal {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1500;
+        }
+            .share-modal.show { display: flex; }
+            .share-modal .modal-content { max-width: 500px; max-height: 80vh; overflow-y: auto; }
+            .share-user-item {
+                display: flex;
+                align-items: center;
+                padding: 10px;
+                border-bottom: 1px solid #eee;
+                gap: 10px;
+            }
+            .share-user-item:last-child { border-bottom: none; }
+            .share-user-item input[type="checkbox"] { width: 20px; height: 20px; margin: 0; }
+            .share-user-item label { flex: 1; cursor: pointer; font-size: 16px; }
+            .share-options { margin: 16px 0; padding: 12px; background: #f5f5f5; border-radius: 8px; }
+            .share-options label { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 15px; }
+            .share-options input[type="checkbox"] { width: 20px; height: 20px; margin: 0; }
+            .share-save-btn { margin-top: 16px; }
+            body.dark-mode .share-user-item { border-bottom-color: #333; }
+            body.dark-mode .share-options { background: #2a2a2a; }
+
         .image-modal.show { display: flex; }
         .image-modal img {
             max-width: 90%;
             max-height: 90%;
             border-radius: 8px;
         }
+
+        .share-modal {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1500;
+        }
+.share-modal.show { display: flex; }
+.share-modal .modal-content { max-width: 500px; max-height: 80vh; overflow-y: auto; }
+.share-user-item {
+    display: flex;
+    align-items: center;
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+    gap: 10px;
+}
+.share-user-item:last-child { border-bottom: none; }
+.share-user-item input[type="checkbox"] { width: 20px; height: 20px; margin: 0; }
+.share-user-item label { flex: 1; cursor: pointer; font-size: 16px; }
+.share-options { margin: 16px 0; padding: 12px; background: #f5f5f5; border-radius: 8px; }
+.share-options label { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 15px; }
+.share-options input[type="checkbox"] { width: 20px; height: 20px; margin: 0; }
+.share-save-btn { margin-top: 16px; }
+.note-owner { font-size: 12px; color: #888; margin-left: 8px; }
+.btn-share { background: #9C27B0 !important; }
+body.dark-mode .share-user-item { border-bottom-color: #333; }
+body.dark-mode .share-options { background: #2a2a2a; }
+
 
         /* ТЁМНАЯ ТЕМА */
         body.dark-mode { background: #121212; color: #e0e0e0; }
@@ -379,6 +439,13 @@
             <button id="btn-remove-preview" class="btn-remove-image" style="display:none;" onclick="removeImagePreview()">Удалить фото</button>
         </div>
 
+         <div style="margin-bottom: 12px; padding: 10px; background: #f5f5f5; border-radius: 8px;">
+        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 15px;">
+            <input type="checkbox" id="is-public-toggle" style="width: 20px; height: 20px; margin: 0;">
+            <span> Сделать заметку общей (видят все)</span>
+        </label>
+        </div>
+
         <button onclick="saveNote()" id="save-btn">Сохранить</button>
         <button onclick="cancelEdit()" id="cancel-btn" style="display:none; background:#999; margin-top:8px;">Отменить редактирование</button>
 
@@ -417,6 +484,29 @@
         </div>
     </div>
 
+
+<!-- Модальное окно общего доступа -->
+<div id="share-modal" class="share-modal" onclick="closeShareModal(event)">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>👥 Общий доступ</h2>
+            <button class="modal-close" onclick="closeShareModal()">&times;</button>
+        </div>
+        <div class="share-options">
+            <label>
+                <input type="checkbox" id="share-is-public" onchange="onSharePublicChange()">
+                <span> Сделать заметку общей (видят все)</span>
+            </label>
+        </div>
+        <h3 style="margin-bottom: 10px; font-size: 15px;">Поделиться с пользователями:</h3>
+        <div id="share-users-list"></div>
+        <button class="share-save-btn" onclick="saveShareSettings()">Сохранить</button>
+    </div>
+</div>
+
+
+
+
     <!-- Модальное окно для просмотра картинки -->
     <div id="image-modal" class="image-modal" onclick="closeImageModal()">
         <img id="image-modal-img" src="" alt="Полный размер">
@@ -425,6 +515,7 @@
     <script>
         var allCategories = [];
         var currentCategoryFilter = '';
+        var currentUserId = null;
         var searchTimeout = null;
         var currentImageFilename = '';
         var defaultCategories = ['Авто', 'Работа', 'Дом', 'Покупки', 'Личное', 'Здоровье', 'Идеи', 'Важное', 'Дача', 'Хобби'];
@@ -510,7 +601,8 @@
             fetch('/login', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({username: username, password: password})
+                body: JSON.stringify({username: username, password: password, })
+
             })
             .then(function(response) {
                 if (response.ok) return response.json();
@@ -519,6 +611,7 @@
             .then(function(data) {
                 setCookie('session_id', data.session_id, 30);
                 localStorage.setItem('username', username);
+                currentUserId = data.id;
                 document.getElementById('auth-section').classList.add('hidden');
                 document.getElementById('app-section').classList.add('visible');
                 document.getElementById('current-username').textContent = username;
@@ -549,6 +642,7 @@
             .then(function(data) {
                 setCookie('session_id', data.session_id, 30);
                 localStorage.setItem('username', username);
+                currentUserId = data.id;
                 document.getElementById('auth-section').classList.add('hidden');
                 document.getElementById('app-section').classList.add('visible');
                 document.getElementById('current-username').textContent = username;
@@ -579,6 +673,7 @@
                 })
                 .then(function(data) {
                     localStorage.setItem('username', data.username);
+                    currentUserId = data.id;
                     document.getElementById('current-username').textContent = data.username;
                     document.getElementById('auth-section').classList.add('hidden');
                     document.getElementById('app-section').classList.add('visible');
@@ -763,59 +858,67 @@
         }
 
         function saveNote() {
-            hideMessages();
-            var title = document.getElementById('title').value;
-            var content = document.getElementById('content').value;
-            var category = document.getElementById('category').value;
-            var editingId = document.getElementById('editing-id').value;
-            if (!title || !content) { showError('Заполни заголовок и текст!'); return; }
+    // Защита от двойного клика
+    var btn = document.getElementById('save-btn');
+    if (btn.disabled) return;  // Если уже идёт сохранение — выходим
 
-            // ОТЛАДКА: смотрим, что отправляем
-            console.log('Сохраняем заметку:', {
-                id: editingId,
-                title: title,
-                image: currentImageFilename
-            });
+    hideMessages();
+    var title = document.getElementById('title').value;
+    var content = document.getElementById('content').value;
+    var category = document.getElementById('category').value;
+    var editingId = document.getElementById('editing-id').value;
 
-            var btn = document.getElementById('save-btn');
-            btn.disabled = true; btn.textContent = 'Сохранение...';
-            var url = editingId ? '/notes/' + editingId : '/notes';
-            var method = editingId ? 'PUT' : 'POST';
-            fetch(url, {
-                method: method, credentials: 'include',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({title: title, content: content, category: category, image: currentImageFilename})
-            })
-            .then(function(response) {
-                if (response.status === 401) {
-                    showError('Сессия истекла, войди снова');
-                    eraseCookie('session_id'); location.reload();
-                } else if (response.ok) {
-                    document.getElementById('title').value = '';
-                    document.getElementById('content').value = '';
-                    document.getElementById('category').value = '';
-                    document.getElementById('editing-id').value = '';
-                    document.getElementById('save-btn').textContent = 'Сохранить';
-                    document.getElementById('cancel-btn').style.display = 'none';
-                    currentImageFilename = '';
-                    removeImagePreview();
-                    loadCategories(); loadNotes();
-                } else { showError('Ошибка сохранения'); }
-            })
-            .catch(function() { showError('Ошибка сети'); })
-            .finally(function() {
-                btn.disabled = false;
-                btn.textContent = editingId ? 'Обновить' : 'Сохранить';
-            });
+    if (!title || !content) { showError('Заполни заголовок и текст!'); return; }
+
+    console.log('Сохраняем заметку:', {id: editingId, title: title, image: currentImageFilename});
+
+    btn.disabled = true;
+    btn.textContent = 'Сохранение...';
+
+    var url = editingId ? '/notes/' + editingId : '/notes';
+    var method = editingId ? 'PUT' : 'POST';
+    var isPublic = document.getElementById('is-public-toggle').checked ? 1 : 0;
+
+    fetch(url, {
+        method: method, credentials: 'include',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({title: title, content: content, category: category, image: currentImageFilename, is_public: isPublic})
+    })
+    .then(function(response) {
+        if (response.status === 401) {
+            showError('Сессия истекла, войди снова');
+            eraseCookie('session_id'); location.reload();
+        } else if (response.ok) {
+            document.getElementById('title').value = '';
+            document.getElementById('content').value = '';
+            document.getElementById('category').value = '';
+            document.getElementById('editing-id').value = '';
+            document.getElementById('save-btn').textContent = 'Сохранить';
+            document.getElementById('cancel-btn').style.display = 'none';
+            document.getElementById('is-public-toggle').checked = false;
+            currentImageFilename = '';
+            removeImagePreview();
+            loadCategories();
+            loadNotes();
+        } else {
+            showError('Ошибка сохранения');
         }
+    })
+    .catch(function() { showError('Ошибка сети'); })
+    .finally(function() {
+        btn.disabled = false;
+        btn.textContent = editingId ? 'Обновить' : 'Сохранить';
+    });
+}
 
-        function editNote(id, title, content, category, image) {
+        function editNote(id, title, content, category, image, isPublic) {
             document.getElementById('title').value = title;
             document.getElementById('content').value = content;
             document.getElementById('category').value = category || '';
             document.getElementById('editing-id').value = id;
             document.getElementById('save-btn').textContent = 'Обновить';
             document.getElementById('cancel-btn').style.display = 'block';
+            document.getElementById('is-public-toggle').checked = (isPublic == 1);
             if (image) {
                 currentImageFilename = image;
                 var preview = document.getElementById('image-preview');
@@ -865,14 +968,38 @@
                     var date = new Date(n.created_at).toLocaleString('ru-RU');
                     var categoryHtml = n.category ? '<span class="category-badge" style="background:' + getCategoryColor(n.category) + '">' + n.category + '</span>' : '';
                     var imageHtml = n.image ? '<img class="note-image" src="/uploads/' + n.image + '" onclick="openImageModal(\'/uploads/' + n.image + '\')"><button class="btn-remove-image" onclick="removeNoteImage(' + n.id + ')">Удалить фото</button>' : '';
+
+                    // Иконка доступа и имя владельца
+                    var accessIcon = '';
+                    var ownerInfo = '';
+                    if (n.user_id === currentUserId) {
+                        // Моя заметка
+                        if (n.is_public == 1) {
+                            accessIcon = '<span style="color:#4CAF50; font-size:14px;" title="Общая заметка">🌐</span>';
+                        }
+                    } else {
+                        // Чужая заметка
+                        ownerInfo = '<span class="note-owner">от ' + (n.owner_username || 'неизвестно') + '</span>';
+                        if (n.is_public == 1) {
+                            accessIcon = '<span style="color:#4CAF50; font-size:14px;" title="Общая заметка">🌐</span>';
+                        } else {
+                            accessIcon = '<span style="color:#2196F3; font-size:14px;" title="Поделились со мной">👥</span>';
+                        }
+                    }
+
+                    // Кнопка "Поделиться" только для владельца
+                    var shareButton = n.user_id === currentUserId ?
+                        '<button class="btn-share" style="flex:none; width:auto; padding:8px 16px; font-size:14px; background:#9C27B0 !important;" onclick="openShareModal(' + n.id + ')">👥 Поделиться</button>' : '';
+
                     return '<div class="note" style="border-left-color:' + (n.category ? getCategoryColor(n.category) : '#ccc') + '">' +
-                        '<div class="meta">' + categoryHtml + '<span class="date">' + date + '</span></div>' +
+                        '<div class="meta">' + categoryHtml + accessIcon + ownerInfo + '<span class="date">' + date + '</span></div>' +
                         '<h3>' + n.title + '</h3>' +
                         '<p>' + n.content + '</p>' +
                         imageHtml +
                         '<div class="buttons">' +
-                            '<button class="btn-edit" onclick="editNote(' + n.id + ', \'' + n.title.replace(/'/g, "\\'") + '\', \'' + n.content.replace(/'/g, "\\'").replace(/\n/g, "\\n") + '\', \'' + (n.category || '').replace(/'/g, "\\'") + '\', \'' + (n.image || '').replace(/'/g, "\\'") + '\')">Изменить</button>' +
-                            '<button class="btn-delete" onclick="deleteNote(' + n.id + ')">Удалить</button>' +
+                            (n.user_id === currentUserId ? '<button class="btn-edit" onclick="editNote(' + n.id + ', \'' + n.title.replace(/'/g, "\\'") + '\', \'' + n.content.replace(/'/g, "\\'").replace(/\n/g, "\\n") + '\', \'' + (n.category || '').replace(/'/g, "\\'") + '\', \'' + (n.image || '').replace(/'/g, "\\'") + '\', ' + (n.is_public || 0) + ')">Изменить</button>' : '') +
+                            (n.user_id === currentUserId ? '<button class="btn-delete" onclick="deleteNote(' + n.id + ')">Удалить</button>' : '') +
+                            shareButton +
                         '</div></div>';
                 }).join('');
             })
@@ -932,6 +1059,98 @@
             document.getElementById('dark-mode-toggle').checked = true;
             document.body.classList.add('dark-mode');
         }
+
+        // === ОБЩИЙ ДОСТУП ===
+
+var currentShareNoteId = null;
+
+function openShareModal(noteId) {
+    console.log('Открываем модалку для заметки:', noteId);
+    console.log('currentUserId:', currentUserId);
+
+    if (!currentUserId) {
+        showError('Сначала войди в систему');
+        return;
+    }
+
+    currentShareNoteId = noteId;
+    fetch('/notes/' + noteId + '/share', {credentials: 'include'})
+    .then(function(r) {
+        if (!r.ok) throw new Error('Ошибка загрузки');
+        return r.json();
+    })
+    .then(function(data) {
+        console.log('Данные доступа:', data);
+        document.getElementById('share-is-public').checked = (data.is_public == 1);
+        var container = document.getElementById('share-users-list');
+        container.innerHTML = '<p style="color:#999;">Загрузка...</p>';
+
+        fetch('/users', {credentials: 'include'})
+        .then(function(r) { return r.json(); })
+        .then(function(users) {
+            if (users.length === 0) {
+                container.innerHTML = '<p style="color:#999;">В системе нет других пользователей</p>';
+                return;
+            }
+            var sharedIds = data.shared_with.map(function(u) { return u.id; });
+            container.innerHTML = users.map(function(u) {
+                var checked = sharedIds.indexOf(u.id) !== -1 ? 'checked' : '';
+                return '<div class="share-user-item">' +
+                    '<input type="checkbox" id="share-user-' + u.id + '" value="' + u.id + '" ' + checked + '>' +
+                    '<label for="share-user-' + u.id + '">' + u.username + '</label>' +
+                '</div>';
+            }).join('');
+        });
+
+        document.getElementById('share-modal').classList.add('show');
+    })
+    .catch(function(err) {
+        console.error('Ошибка:', err);
+        showError('Ошибка загрузки настроек доступа');
+    });
+}
+
+function closeShareModal(event) {
+    if (event && event.target !== document.getElementById('share-modal')) return;
+    document.getElementById('share-modal').classList.remove('show');
+    currentShareNoteId = null;
+}
+
+function onSharePublicChange() {
+    var isPublic = document.getElementById('share-is-public').checked;
+    var userList = document.getElementById('share-users-list');
+    if (isPublic) {
+        userList.style.opacity = '0.5';
+        userList.style.pointerEvents = 'none';
+    } else {
+        userList.style.opacity = '1';
+        userList.style.pointerEvents = 'auto';
+    }
+}
+
+function saveShareSettings() {
+    if (!currentShareNoteId) return;
+    var isPublic = document.getElementById('share-is-public').checked ? 1 : 0;
+    var checkboxes = document.querySelectorAll('#share-users-list input[type="checkbox"]:checked');
+    var userIds = Array.from(checkboxes).map(function(cb) { return parseInt(cb.value); });
+
+    fetch('/notes/' + currentShareNoteId + '/share', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({user_ids: userIds, is_public: isPublic})
+    })
+    .then(function(response) {
+        if (response.ok) {
+            closeShareModal();
+            loadNotes();
+        } else {
+            return response.json().then(function(data) { throw new Error(data.detail || 'Ошибка'); });
+        }
+    })
+    .catch(function(err) { showError(err.message); });
+}
+
     </script>
 </body>
 </html>
