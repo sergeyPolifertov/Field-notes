@@ -17,17 +17,23 @@ def init_db():
     conn = get_connection()
     cursor = conn.cursor()
 
-    # Таблица пользователей
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
+            email TEXT,
             password_hash TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
 
-    # Таблица заметок
+    # Добавляем email, если его нет
+    try:
+        cursor.execute('ALTER TABLE users ADD COLUMN email TEXT')
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS notes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,26 +49,22 @@ def init_db():
         )
     ''')
 
-    # Добавляем поле is_public если его нет
     try:
         cursor.execute('ALTER TABLE notes ADD COLUMN is_public INTEGER DEFAULT 0')
         conn.commit()
     except sqlite3.OperationalError:
         pass
-
     try:
         cursor.execute('ALTER TABLE notes ADD COLUMN image TEXT DEFAULT ""')
         conn.commit()
     except sqlite3.OperationalError:
         pass
-
     try:
         cursor.execute('ALTER TABLE notes ADD COLUMN user_id INTEGER DEFAULT 1')
         conn.commit()
     except sqlite3.OperationalError:
         pass
 
-    # Таблица общего доступа
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS shared_notes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -75,7 +77,16 @@ def init_db():
         )
     ''')
 
-    # Таблица сессий
+    # Новая таблица для сброса пароля
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS password_resets (
+            token TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            expires_at TIMESTAMP NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    ''')
+
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS sessions (
             id TEXT PRIMARY KEY,
@@ -92,14 +103,12 @@ def init_db():
 
 
 # === Пользователи ===
-
-def create_user(username: str, password_hash: str):
+def create_user(username: str, email: str, password_hash: str):
     conn = get_connection()
     cursor = conn.cursor()
-    # Приводим имя к нижнему регистру для уникальности
-    username_lower = username.lower()
     try:
-        cursor.execute('INSERT INTO users (username, password_hash) VALUES (?, ?)', (username_lower, password_hash))
+        cursor.execute('INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)',
+                       (username, email, password_hash))
         conn.commit()
         return cursor.lastrowid
     except sqlite3.IntegrityError:
@@ -111,8 +120,16 @@ def create_user(username: str, password_hash: str):
 def get_user_by_username(username: str):
     conn = get_connection()
     cursor = conn.cursor()
-    # Ищем без учёта регистра
     cursor.execute('SELECT * FROM users WHERE LOWER(username) = ?', (username.lower(),))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_user_by_email(email: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM users WHERE LOWER(email) = ?', (email.lower(),))
     row = cursor.fetchone()
     conn.close()
     return dict(row) if row else None
@@ -128,7 +145,6 @@ def get_user_by_id(user_id: int):
 
 
 def get_all_users():
-    """Получить список всех пользователей (для выбора при расшаривании)"""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute('SELECT id, username FROM users ORDER BY username')
@@ -137,8 +153,15 @@ def get_all_users():
     return users
 
 
-# === Сессии ===
+def update_user_password(user_id: int, new_password_hash: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('UPDATE users SET password_hash = ? WHERE id = ?', (new_password_hash, user_id))
+    conn.commit()
+    conn.close()
 
+
+# === Сессии ===
 def create_session(user_id: int, days=30):
     session_id = secrets.token_urlsafe(32)
     expires_at = datetime.now() + timedelta(days=days)
@@ -174,8 +197,43 @@ def delete_session(session_id: str):
     conn.close()
 
 
-# === Заметки ===
+# === Сброс пароля ===
+def create_reset_token(user_id: int):
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now() + timedelta(hours=1)  # Токен живёт 1 час
+    conn = get_connection()
+    cursor = conn.cursor()
+    # Удаляем старые токены этого пользователя
+    cursor.execute('DELETE FROM password_resets WHERE user_id = ?', (user_id,))
+    cursor.execute('INSERT INTO password_resets (token, user_id, expires_at) VALUES (?, ?, ?)',
+                   (token, user_id, expires_at.isoformat()))
+    conn.commit()
+    conn.close()
+    return token
 
+
+def get_user_by_reset_token(token: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT u.* FROM users u
+        JOIN password_resets pr ON u.id = pr.user_id
+        WHERE pr.token = ? AND pr.expires_at > ?
+    ''', (token, datetime.now().isoformat()))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def delete_reset_token(token: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM password_resets WHERE token = ?', (token,))
+    conn.commit()
+    conn.close()
+
+
+# === Заметки (без изменений, кроме DISTINCT) ===
 def get_all_notes_for_user(user_id: int):
     conn = get_connection()
     cursor = conn.cursor()
@@ -183,14 +241,13 @@ def get_all_notes_for_user(user_id: int):
         SELECT DISTINCT n.*, u.username as owner_username
         FROM notes n
         LEFT JOIN users u ON n.user_id = u.id
-        WHERE n.user_id = ? 
-           OR COALESCE(n.is_public, 0) = 1
-           OR n.id IN (SELECT note_id FROM shared_notes WHERE shared_with_user_id = ?)
+        WHERE n.user_id = ? OR COALESCE(n.is_public, 0) = 1 OR n.id IN (SELECT note_id FROM shared_notes WHERE shared_with_user_id = ?)
         ORDER BY n.created_at DESC
     ''', (user_id, user_id))
     notes = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return notes
+
 
 def get_notes_by_category_for_user(user_id: int, category: str):
     conn = get_connection()
@@ -198,23 +255,21 @@ def get_notes_by_category_for_user(user_id: int, category: str):
     if category:
         cursor.execute('''
             SELECT DISTINCT n.*, u.username as owner_username
-            FROM notes n
-            LEFT JOIN users u ON n.user_id = u.id
-            WHERE (n.user_id = ? OR COALESCE(n.is_public, 0) = 1 OR n.id IN (SELECT note_id FROM shared_notes WHERE shared_with_user_id = ?))
-              AND n.category = ?
+            FROM notes n LEFT JOIN users u ON n.user_id = u.id
+            WHERE (n.user_id = ? OR COALESCE(n.is_public, 0) = 1 OR n.id IN (SELECT note_id FROM shared_notes WHERE shared_with_user_id = ?)) AND n.category = ?
             ORDER BY n.created_at DESC
         ''', (user_id, user_id, category))
     else:
         cursor.execute('''
             SELECT DISTINCT n.*, u.username as owner_username
-            FROM notes n
-            LEFT JOIN users u ON n.user_id = u.id
+            FROM notes n LEFT JOIN users u ON n.user_id = u.id
             WHERE n.user_id = ? OR COALESCE(n.is_public, 0) = 1 OR n.id IN (SELECT note_id FROM shared_notes WHERE shared_with_user_id = ?)
             ORDER BY n.created_at DESC
         ''', (user_id, user_id))
     notes = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return notes
+
 
 def search_notes_for_user(user_id: int, query: str, category: str = ""):
     conn = get_connection()
@@ -223,18 +278,15 @@ def search_notes_for_user(user_id: int, query: str, category: str = ""):
     if category:
         cursor.execute('''
             SELECT DISTINCT n.*, u.username as owner_username
-            FROM notes n
-            LEFT JOIN users u ON n.user_id = u.id
+            FROM notes n LEFT JOIN users u ON n.user_id = u.id
             WHERE (n.user_id = ? OR COALESCE(n.is_public, 0) = 1 OR n.id IN (SELECT note_id FROM shared_notes WHERE shared_with_user_id = ?))
-              AND n.category = ?
-              AND (LOWER(n.title) LIKE ? OR LOWER(n.content) LIKE ?)
+              AND n.category = ? AND (LOWER(n.title) LIKE ? OR LOWER(n.content) LIKE ?)
             ORDER BY n.created_at DESC
         ''', (user_id, user_id, category, search_term, search_term))
     else:
         cursor.execute('''
             SELECT DISTINCT n.*, u.username as owner_username
-            FROM notes n
-            LEFT JOIN users u ON n.user_id = u.id
+            FROM notes n LEFT JOIN users u ON n.user_id = u.id
             WHERE (n.user_id = ? OR COALESCE(n.is_public, 0) = 1 OR n.id IN (SELECT note_id FROM shared_notes WHERE shared_with_user_id = ?))
               AND (LOWER(n.title) LIKE ? OR LOWER(n.content) LIKE ?)
             ORDER BY n.created_at DESC
@@ -243,14 +295,14 @@ def search_notes_for_user(user_id: int, query: str, category: str = ""):
     conn.close()
     return notes
 
+
 def get_all_categories(user_id: int):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute('''
         SELECT DISTINCT n.category FROM notes n
         LEFT JOIN shared_notes s ON n.id = s.note_id
-        WHERE (n.user_id = ? OR n.is_public = 1 OR s.shared_with_user_id = ?)
-          AND n.category != ""
+        WHERE (n.user_id = ? OR COALESCE(n.is_public, 0) = 1 OR s.shared_with_user_id = ?) AND n.category != ""
         ORDER BY n.category
     ''', (user_id, user_id))
     categories = [row['category'] for row in cursor.fetchall()]
@@ -261,10 +313,8 @@ def get_all_categories(user_id: int):
 def add_note(user_id: int, title: str, content: str, category: str = "", image: str = "", is_public: int = 0):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute(
-        'INSERT INTO notes (user_id, title, content, category, image, is_public) VALUES (?, ?, ?, ?, ?, ?)',
-        (user_id, title, content, category, image, is_public)
-    )
+    cursor.execute('INSERT INTO notes (user_id, title, content, category, image, is_public) VALUES (?, ?, ?, ?, ?, ?)',
+                   (user_id, title, content, category, image, is_public))
     conn.commit()
     note_id = cursor.lastrowid
     conn.close()
@@ -278,8 +328,7 @@ def delete_note(note_id: int, user_id: int):
     row = cursor.fetchone()
     if row and row['image']:
         filepath = os.path.join("uploads", row['image'])
-        if os.path.exists(filepath):
-            os.remove(filepath)
+        if os.path.exists(filepath): os.remove(filepath)
     cursor.execute('DELETE FROM notes WHERE id = ? AND user_id = ?', (note_id, user_id))
     deleted = cursor.rowcount
     conn.commit()
@@ -294,13 +343,11 @@ def update_note(note_id: int, user_id: int, title: str, content: str, category: 
     if is_public is not None:
         cursor.execute(
             'UPDATE notes SET title = ?, content = ?, category = ?, image = ?, is_public = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?',
-            (title, content, category, image, is_public, note_id, user_id)
-        )
+            (title, content, category, image, is_public, note_id, user_id))
     else:
         cursor.execute(
             'UPDATE notes SET title = ?, content = ?, category = ?, image = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?',
-            (title, content, category, image, note_id, user_id)
-        )
+            (title, content, category, image, note_id, user_id))
     updated = cursor.rowcount
     conn.commit()
     conn.close()
@@ -308,15 +355,13 @@ def update_note(note_id: int, user_id: int, title: str, content: str, category: 
 
 
 def get_note_by_id(note_id: int, user_id: int):
-    """Получить заметку (свою или доступную)"""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT n.*, u.username as owner_username
-        FROM notes n
+        SELECT n.*, u.username as owner_username FROM notes n
         LEFT JOIN users u ON n.user_id = u.id
         LEFT JOIN shared_notes s ON n.id = s.note_id
-        WHERE n.id = ? AND (n.user_id = ? OR n.is_public = 1 OR s.shared_with_user_id = ?)
+        WHERE n.id = ? AND (n.user_id = ? OR COALESCE(n.is_public, 0) = 1 OR s.shared_with_user_id = ?)
     ''', (note_id, user_id, user_id))
     row = cursor.fetchone()
     conn.close()
@@ -332,36 +377,26 @@ def get_note_image(note_id: int, user_id: int):
     return row['image'] if row else None
 
 
-# === Общий доступ ===
-
 def share_note_with_users(note_id: int, owner_id: int, user_ids: list):
-    """Поделиться заметкой с конкретными пользователями"""
     conn = get_connection()
     cursor = conn.cursor()
-    # Проверяем, что заметка принадлежит владельцу
     cursor.execute('SELECT id FROM notes WHERE id = ? AND user_id = ?', (note_id, owner_id))
     if not cursor.fetchone():
         conn.close()
         return False
-
-    # Удаляем старые расшаривания
     cursor.execute('DELETE FROM shared_notes WHERE note_id = ?', (note_id,))
-
-    # Добавляем новые
     for uid in user_ids:
-        if uid != owner_id:  # Не расшариваем самому себе
+        if uid != owner_id:
             try:
                 cursor.execute('INSERT INTO shared_notes (note_id, shared_with_user_id) VALUES (?, ?)', (note_id, uid))
             except sqlite3.IntegrityError:
-                pass  # Уже есть
-
+                pass
     conn.commit()
     conn.close()
     return True
 
 
 def get_shared_users(note_id: int, owner_id: int):
-    """Получить список пользователей, с которыми расшарена заметка"""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute('''
@@ -375,7 +410,6 @@ def get_shared_users(note_id: int, owner_id: int):
 
 
 def set_note_public(note_id: int, owner_id: int, is_public: int):
-    """Сделать заметку общей/приватной"""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute('UPDATE notes SET is_public = ? WHERE id = ? AND user_id = ?', (is_public, note_id, owner_id))

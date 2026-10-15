@@ -50,7 +50,16 @@
         button:disabled { background: #ccc; }
         .btn-edit { background: #2196F3 !important; }
         .btn-delete { background: #f44336 !important; }
-        .btn-settings { background: #607D8B !important; width: auto; padding: 8px 16px; font-size: 20px; }
+        .btn-settings {
+    background: transparent !important;
+    width: auto;
+    padding: 8px 16px;
+    font-size: 20px;
+    color: #607D8B;
+}
+.btn-settings:hover {
+    background: rgba(0,0,0,0.1) !important;
+}
         .btn-upload { background: #9C27B0 !important; width: auto; padding: 10px 20px; font-size: 14px; margin-bottom: 8px; }
         .btn-remove-image { background: #ff9800 !important; width: auto; padding: 6px 12px; font-size: 12px; margin-top: 8px; }
 
@@ -316,6 +325,12 @@
             .share-save-btn { margin-top: 16px; }
             body.dark-mode .share-user-item { border-bottom-color: #333; }
             body.dark-mode .share-options { background: #2a2a2a; }
+            body.dark-mode .btn-settings {
+    color: #90CAF9;
+}
+body.dark-mode .btn-settings:hover {
+    background: rgba(255,255,255,0.1) !important;
+}
 
         .image-modal.show { display: flex; }
         .image-modal img {
@@ -403,10 +418,13 @@ body.dark-mode .share-options { background: #2a2a2a; }
             <input type="text" id="login-username" placeholder="Имя пользователя">
             <input type="password" id="login-password" placeholder="Пароль">
             <button onclick="doLogin()">Войти</button>
+            <a href="#" onclick="showForgotPassword()" style="font-size: 14px; color: #2196F3; text-decoration: underline; margin-top: 8px; display: block; text-align: right;">Забыл пароль?</a>
+
         </div>
 
         <div id="register-form" class="form-section">
             <input type="text" id="reg-username" placeholder="Придумай имя пользователя">
+            <input type="email" id="reg-email" placeholder="Твоя почта (для восстановления пароля)">
             <input type="password" id="reg-password" placeholder="Придумай пароль (мин. 4 символа)">
             <input type="password" id="reg-password2" placeholder="Повтори пароль">
             <button onclick="doRegister()">Зарегистрироваться</button>
@@ -414,7 +432,32 @@ body.dark-mode .share-options { background: #2a2a2a; }
 
         <div id="error"></div>
         <div id="success"></div>
+
+
+
     </div>
+
+<!-- Форма "Забыл пароль" (ввод email) -->
+<div id="forgot-password-section" style="display: none; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px;">
+    <h3 style="margin-bottom: 16px;">🔑 Восстановление пароля</h3>
+    <p style="margin-bottom: 12px; color: #666; font-size: 14px;">Введи email, указанный при регистрации. Мы отправим ссылку для сброса пароля.</p>
+    <input type="email" id="forgot-email" placeholder="Твоя почта">
+    <button onclick="doForgotPassword()" style="margin-bottom: 8px;">Отправить ссылку</button>
+    <button onclick="cancelForgotPassword()" style="background: #999;">Отмена</button>
+    <div id="forgot-success" style="color: green; margin-top: 12px; display: none; padding: 10px; background: #e8f5e9; border-radius: 4px;"></div>
+    <div id="forgot-error" style="color: red; margin-top: 8px; display: none;"></div>
+</div>
+
+<!-- Форма установки нового пароля (по токену из письма) -->
+<div id="reset-password-section" style="display: none; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px;">
+    <h3 style="margin-bottom: 16px;">🔑 Установка нового пароля</h3>
+    <input type="hidden" id="reset-token-input">
+    <input type="password" id="reset-new-password" placeholder="Новый пароль (мин. 4 символа)">
+    <input type="password" id="reset-new-password2" placeholder="Повтори новый пароль">
+    <button onclick="doResetPassword()" style="margin-bottom: 8px;">Сохранить новый пароль</button>
+    <button onclick="cancelResetPassword()" style="background: #999;">Отмена</button>
+    <div id="reset-error" style="color: red; margin-top: 8px; display: none;"></div>
+</div>
 
     <div id="app-section">
         <div class="user-info">
@@ -623,17 +666,19 @@ body.dark-mode .share-options { background: #2a2a2a; }
 
         function doRegister() {
             hideMessages();
-            var username = document.getElementById('reg-username').value;
+            var username = document.getElementById('reg-username').value.trim().toLowerCase();
+            var email = document.getElementById('reg-email').value.trim().toLowerCase();
             var password = document.getElementById('reg-password').value;
             var password2 = document.getElementById('reg-password2').value;
-            if (!username || !password || !password2) { showError('Заполни все поля!'); return; }
+            if (!username || !email || !password || !password2) { showError('Заполни все поля!'); return; }
+            if (!email.includes('@')) { showError('Введи корректный email!'); return; }
             if (password !== password2) { showError('Пароли не совпадают!'); return; }
             if (password.length < 4) { showError('Пароль должен быть не короче 4 символов!'); return; }
 
             fetch('/register', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({username: username, password: password})
+                body: JSON.stringify({username: username, email: email, password: password})
             })
             .then(function(response) {
                 if (response.ok) return response.json();
@@ -641,13 +686,13 @@ body.dark-mode .share-options { background: #2a2a2a; }
             })
             .then(function(data) {
                 setCookie('session_id', data.session_id, 30);
-                localStorage.setItem('username', username);
-                currentUserId = data.user_id;  // ← Используем user_id из ответа
+                localStorage.setItem('username', data.username);
+                currentUserId = data.user_id;
                 document.getElementById('auth-section').classList.add('hidden');
                 document.getElementById('app-section').classList.add('visible');
-                document.getElementById('current-username').textContent = username;
-                loadCategories();
-                loadNotes();
+                document.getElementById('current-username').textContent = data.username;
+                loadCategories(); loadNotes();
+                showSuccess('Регистрация успешна! Приветственное письмо отправлено на ' + email);
             })
             .catch(function(err) { showError(err.message); });
         }
@@ -1150,6 +1195,118 @@ function saveShareSettings() {
     })
     .catch(function(err) { showError(err.message); });
 }
+
+// === СБРОС ПАРОЛЯ ===
+
+function showForgotPassword() {
+    document.getElementById('auth-section').classList.add('hidden');
+    document.getElementById('forgot-password-section').style.display = 'block';
+    document.getElementById('forgot-success').style.display = 'none';
+    document.getElementById('forgot-error').style.display = 'none';
+}
+
+function cancelForgotPassword() {
+    document.getElementById('forgot-password-section').style.display = 'none';
+    document.getElementById('auth-section').classList.remove('hidden');
+}
+
+function doForgotPassword() {
+    var email = document.getElementById('forgot-email').value.trim().toLowerCase();
+    var successDiv = document.getElementById('forgot-success');
+    var errorDiv = document.getElementById('forgot-error');
+
+    if (!email || !email.includes('@')) {
+        errorDiv.textContent = 'Введи корректный email!';
+        errorDiv.style.display = 'block';
+        successDiv.style.display = 'none';
+        return;
+    }
+
+    fetch('/forgot-password', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({email: email})
+    })
+    .then(function(response) {
+        if (response.ok) {
+            errorDiv.style.display = 'none';
+            successDiv.textContent = '✅ Если почта зарегистрирована, мы отправили ссылку для сброса пароля. Проверь inbox (и папку Спам).';
+            successDiv.style.display = 'block';
+            document.getElementById('forgot-email').value = '';
+        } else {
+            return response.json().then(function(data) { throw new Error(data.detail || 'Ошибка'); });
+        }
+    })
+    .catch(function(err) {
+        errorDiv.textContent = err.message;
+        errorDiv.style.display = 'block';
+        successDiv.style.display = 'none';
+    });
+}
+
+function cancelResetPassword() {
+    document.getElementById('reset-password-section').style.display = 'none';
+    document.getElementById('auth-section').classList.remove('hidden');
+    // Очищаем URL от токена
+    window.history.replaceState({}, document.title, "/");
+}
+
+function doResetPassword() {
+    var token = document.getElementById('reset-token-input').value;
+    var pass1 = document.getElementById('reset-new-password').value;
+    var pass2 = document.getElementById('reset-new-password2').value;
+    var errDiv = document.getElementById('reset-error');
+
+    if (!token) {
+        errDiv.textContent = 'Ошибка: ссылка недействительна. Запроси новую.';
+        errDiv.style.display = 'block';
+        return;
+    }
+    if (pass1.length < 4) {
+        errDiv.textContent = 'Пароль должен быть не короче 4 символов';
+        errDiv.style.display = 'block';
+        return;
+    }
+    if (pass1 !== pass2) {
+        errDiv.textContent = 'Пароли не совпадают';
+        errDiv.style.display = 'block';
+        return;
+    }
+
+    fetch('/reset-password', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({token: token, new_password: pass1})
+    })
+    .then(function(response) {
+        if (response.ok) {
+            alert('✅ Пароль успешно изменён! Теперь войди с новым паролем.');
+            window.location.href = '/';
+        } else {
+            return response.json().then(function(data) { throw new Error(data.detail || 'Ошибка'); });
+        }
+    })
+    .catch(function(err) {
+        errDiv.textContent = err.message;
+        errDiv.style.display = 'block';
+    });
+}
+
+// Проверяем URL при загрузке — если есть токен сброса, показываем форму установки пароля
+window.addEventListener('DOMContentLoaded', function() {
+    var urlParams = new URLSearchParams(window.location.search);
+    var resetToken = urlParams.get('reset');
+
+    if (resetToken) {
+        // Показываем форму установки нового пароля
+        document.getElementById('auth-section').classList.add('hidden');
+        document.getElementById('reset-password-section').style.display = 'block';
+        document.getElementById('reset-token-input').value = resetToken;
+        // Очищаем URL, чтобы токен не светился
+        window.history.replaceState({}, document.title, "/");
+    }
+});
+
 
     </script>
 </body>
