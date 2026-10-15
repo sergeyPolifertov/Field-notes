@@ -20,6 +20,45 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 
+@app.delete("/uploads/{filename}")
+def delete_upload_file(filename: str, session_id: Optional[str] = Cookie(None)):
+    user = get_current_user(session_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="Не авторизован")
+
+    # Проверяем, что файл существует
+    filepath = os.path.join("uploads", filename)
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="Файл не найден")
+
+    # Проверяем, что файл привязан к заметке этого пользователя (безопасность)
+    from database import get_connection
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT id FROM notes WHERE image = ? AND user_id = ?', (filename, user['id']))
+    row = cursor.fetchone()
+    conn.close()
+
+    if row:
+        # Файл привязан к заметке — очищаем поле image в базе
+        update_note(row['id'], user['id'], "", "", "", "")
+        # Но нужно сохранить title, content, category
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT title, content, category FROM notes WHERE id = ?', (row['id'],))
+        note_row = cursor.fetchone()
+        if note_row:
+            update_note(row['id'], user['id'], note_row['title'], note_row['content'], note_row['category'], "")
+        conn.close()
+
+    # Удаляем файл с диска
+    try:
+        os.remove(filepath)
+        return {"message": "Файл удалён"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка удаления: {str(e)}")
+
+
 # === Модели ===
 
 class LoginRequest(BaseModel):
@@ -198,10 +237,35 @@ def delete_existing_note(note_id: int, request: Request, session_id: Optional[st
 
 
 @app.put("/notes/{note_id}")
+@app.put("/notes/{note_id}")
 def edit_note(note_id: int, note: Note, request: Request, session_id: Optional[str] = Cookie(None)):
     user = get_current_user(session_id)
     if not user:
         raise HTTPException(status_code=401, detail="Не авторизован")
+
+    # ОТЛАДКА
+    print(f"Обновляем заметку {note_id}: image={note.image}")
+
+    # Получаем старую заметку, чтобы проверить, было ли фото
+    from database import get_connection
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT image FROM notes WHERE id = ? AND user_id = ?', (note_id, user['id']))
+    old_row = cursor.fetchone()
+    conn.close()
+
+    old_image = old_row['image'] if old_row else None
+
+    # Если старое фото есть и оно отличается от нового — удаляем файл
+    if old_image and old_image != note.image:
+        old_filepath = os.path.join("uploads", old_image)
+        if os.path.exists(old_filepath):
+            try:
+                os.remove(old_filepath)
+            except Exception as e:
+                print(f"Не удалось удалить старое фото: {e}")
+
+    # Обновляем заметку
     if update_note(note_id, user['id'], note.title, note.content, note.category, note.image):
         return {"message": "Заметка обновлена"}
     return {"message": "Заметка не найдена"}

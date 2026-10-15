@@ -225,6 +225,13 @@ def add_note(user_id: int, title: str, content: str, category: str = "", image: 
 def delete_note(note_id: int, user_id: int):
     conn = get_connection()
     cursor = conn.cursor()
+    # Сначала получаем путь к картинке, чтобы удалить файл
+    cursor.execute('SELECT image FROM notes WHERE id = ? AND user_id = ?', (note_id, user_id))
+    row = cursor.fetchone()
+    if row and row['image']:
+        filepath = os.path.join("uploads", row['image'])
+        if os.path.exists(filepath):
+            os.remove(filepath)
     cursor.execute('DELETE FROM notes WHERE id = ? AND user_id = ?', (note_id, user_id))
     deleted = cursor.rowcount
     conn.commit()

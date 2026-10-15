@@ -694,10 +694,50 @@
         }
 
         function removeImagePreview() {
-            document.getElementById('image-preview').src = '';
-            document.getElementById('image-preview').classList.remove('show');
-            document.getElementById('btn-remove-preview').style.display = 'none';
-            document.getElementById('file-input').value = '';
+            var preview = document.getElementById('image-preview');
+            var btnRemove = document.getElementById('btn-remove-preview');
+            var fileInput = document.getElementById('file-input');
+
+            // Если есть текущее фото и мы редактируем заметку — удаляем с сервера
+            if (currentImageFilename) {
+                var editingId = document.getElementById('editing-id').value;
+
+                if (editingId) {
+                    // Редактируем существующую заметку — удаляем фото через API
+                    fetch('/notes/' + editingId + '/image', {
+                        method: 'DELETE',
+                        credentials: 'include'
+                    })
+                    .then(function(response) {
+                        if (response.ok) {
+                            console.log('Фото удалено с сервера');
+                        }
+                    })
+                    .catch(function(err) {
+                        console.error('Ошибка удаления фото:', err);
+                    });
+                } else {
+                    // Создаём новую заметку — удаляем файл напрямую
+                    fetch('/uploads/' + currentImageFilename, {
+                        method: 'DELETE',
+                        credentials: 'include'
+                    })
+                    .then(function(response) {
+                        if (response.ok) {
+                            console.log('Фото удалено с сервера');
+                        }
+                    })
+                    .catch(function(err) {
+                        console.error('Ошибка удаления фото:', err);
+                    });
+                }
+            }
+
+            // Очищаем превью
+            preview.src = '';
+            preview.classList.remove('show');
+            btnRemove.style.display = 'none';
+            fileInput.value = '';
             currentImageFilename = '';
         }
 
@@ -729,6 +769,14 @@
             var category = document.getElementById('category').value;
             var editingId = document.getElementById('editing-id').value;
             if (!title || !content) { showError('Заполни заголовок и текст!'); return; }
+
+            // ОТЛАДКА: смотрим, что отправляем
+            console.log('Сохраняем заметку:', {
+                id: editingId,
+                title: title,
+                image: currentImageFilename
+            });
+
             var btn = document.getElementById('save-btn');
             btn.disabled = true; btn.textContent = 'Сохранение...';
             var url = editingId ? '/notes/' + editingId : '/notes';
