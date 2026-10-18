@@ -26,5 +26,16 @@ notes.json
 Thumbs.db
 
 uploads/
-.env
 avatars/
+.env
+notebook.db
+
+*.json
+!static/manifest.json
+make_admin.py
+check_cascade.py
+cleanup_orphans.py
+fix_file_locations.py
+fix_duplicate_users.py
+check_db.py
+notes_OLD_backup.json

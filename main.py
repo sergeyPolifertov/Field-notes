@@ -5,7 +5,8 @@ from database import (
     get_all_notes_for_user, get_notes_by_category_for_user, search_notes_for_user, get_all_categories,
     add_note, delete_note, update_note, get_note_by_id, get_note_image,
     share_note_with_users, get_shared_users, set_note_public,
-    get_profile, create_profile, update_profile  # ← ДОБАВЛЕНО
+    get_profile, create_profile, update_profile,
+    set_admin, is_admin, get_stats, get_all_users_with_stats, delete_user  # ← ДОБАВЛЕНО
 )
 import os
 import uuid
@@ -151,9 +152,15 @@ def register(req: RegisterRequest):
     <p style="color: #888; font-size: 12px;">Если это был не ты, просто проигнорируй это письмо.</p>
     """
     send_email(email, "Регистрация в Семейном Блокноте", html)
-
     session_id = create_session(user_id)
-    return {"message": "Регистрация успешна", "session_id": session_id, "user_id": user_id, "username": username}
+    new_user = get_user_by_id(user_id)
+    return {
+        "message": "Регистрация успешна",
+        "session_id": session_id,
+        "user_id": user_id,
+        "username": username,
+        "is_admin": bool(new_user.get('is_admin', 0))
+    }
 
 
 @app.post("/login")
@@ -164,7 +171,13 @@ def login(req: LoginRequest):
         raise HTTPException(status_code=401, detail="Неверное имя пользователя или пароль")
 
     session_id = create_session(user['id'])
-    return {"message": "Вход выполнен", "session_id": session_id, "user_id": user['id'], "username": user['username']}
+    return {
+        "message": "Вход выполнен",
+        "session_id": session_id,
+        "user_id": user['id'],
+        "username": user['username'],
+        "is_admin": bool(user.get('is_admin', 0))
+    }
 
 
 @app.post("/logout")
@@ -176,8 +189,9 @@ def logout(session_id: Optional[str] = Cookie(None)):
 @app.get("/me")
 def get_me(session_id: Optional[str] = Cookie(None)):
     user = get_current_user(session_id)
-    if not user: raise HTTPException(status_code=401, detail="Не авторизован")
-    return {"id": user['id'], "username": user['username']}
+    if not user:
+        raise HTTPException(status_code=401, detail="Не авторизован")
+    return {"id": user['id'], "username": user['username'], "is_admin": bool(user.get('is_admin', 0))}
 
 
 # === Профили ===
@@ -254,6 +268,75 @@ def upload_avatar(file: UploadFile = File(...), session_id: Optional[str] = Cook
     update_profile(user['id'], avatar=filename)
 
     return {"filename": filename, "url": f"/avatars/{filename}"}  # ← ИЗМЕНЕНО
+
+
+# === Админка ===
+
+@app.get("/admin/stats")
+def get_admin_stats(session_id: Optional[str] = Cookie(None)):
+    user = get_current_user(session_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="Не авторизован")
+    if not is_admin(user['id']):
+        raise HTTPException(status_code=403, detail="Только для администраторов")
+    return get_stats()
+
+
+@app.get("/admin/users")
+def get_admin_users(session_id: Optional[str] = Cookie(None)):
+    user = get_current_user(session_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="Не авторизован")
+    if not is_admin(user['id']):
+        raise HTTPException(status_code=403, detail="Только для администраторов")
+    return get_all_users_with_stats()
+
+
+@app.delete("/admin/users/{user_id}")
+def admin_delete_user(user_id: int, session_id: Optional[str] = Cookie(None)):
+    user = get_current_user(session_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="Не авторизован")
+    if not is_admin(user['id']):
+        raise HTTPException(status_code=403, detail="Только для администраторов")
+    if user_id == user['id']:
+        raise HTTPException(status_code=400, detail="Нельзя удалить самого себя")
+    if delete_user(user_id):
+        return {"message": "Пользователь удалён"}
+    return {"message": "Пользователь не найден"}
+
+
+@app.get("/my-stats")
+def get_my_stats(session_id: Optional[str] = Cookie(None)):
+    """Личная статистика для любого пользователя"""
+    user = get_current_user(session_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="Не авторизован")
+
+    from database import get_connection
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute('SELECT COUNT(*) as count FROM notes WHERE user_id = ?', (user['id'],))
+    my_notes = cursor.fetchone()['count']
+
+    cursor.execute('SELECT COUNT(*) as count FROM notes WHERE user_id = ? AND image != ""', (user['id'],))
+    my_photos = cursor.fetchone()['count']
+
+    cursor.execute('SELECT COUNT(*) as count FROM shared_notes WHERE shared_with_user_id = ?', (user['id'],))
+    shared_with_me = cursor.fetchone()['count']
+
+    cursor.execute('SELECT COUNT(*) as count FROM users')
+    total_users = cursor.fetchone()['count']
+
+    conn.close()
+
+    return {
+        'my_notes': my_notes,
+        'my_photos': my_photos,
+        'shared_with_me': shared_with_me,
+        'total_users': total_users
+    }
 
 
 # === Сброс пароля ===

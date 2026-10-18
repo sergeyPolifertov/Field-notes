@@ -11,6 +11,64 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <style>
 
+      /* === Админ-панель === */
+.admin-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+}
+.stat-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+}
+.stat-card .stat-number {
+    font-size: 32px;
+    font-weight: bold;
+    display: block;
+}
+.stat-card .stat-label {
+    font-size: 13px;
+    opacity: 0.9;
+}
+.stat-card.green { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); color: #1a4731; }
+.stat-card.orange { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); color: #5c3a00; }
+.stat-card.blue { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: #003a5c; }
+.admin-user-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+}
+.admin-user-row:last-child { border-bottom: none; }
+.admin-user-info { flex: 1; }
+.admin-user-name { font-weight: bold; }
+.admin-badge {
+    background: #FFD700;
+    color: #5c4400;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-left: 6px;
+}
+.admin-user-meta { font-size: 12px; color: #888; }
+.admin-delete-btn {
+    background: #e53935;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 13px;
+}
+body.dark-mode .admin-user-row { border-bottom-color: #333; }
+
+
+
         .avatar {
     width: 40px;
     height: 40px;
@@ -506,7 +564,8 @@ body.dark-mode .share-options { background: #2a2a2a; }
     <div id="app-section">
         <div class="user-info">
             <div class="user-header">
-                <img id="user-avatar" class="avatar" src="/static/icon-192.png" alt="Аватар">
+                <img id="user-avatar" class="avatar" src="/static/icon-192.png" alt="Аватар"
+                    onclick="openProfileModal()" style="cursor: pointer;" title="Открыть профиль">
                 <div>
                     <div>Привет, <strong id="current-username"></strong>!</div>
                     <div id="user-bio" class="user-bio"></div>
@@ -551,18 +610,6 @@ body.dark-mode .share-options { background: #2a2a2a; }
     <button class="fab-logout" onclick="doLogout()">🚪 Выйти</button>
 
 
-    <!-- Секция редактирования профиля -->
-<div id="profile-section" class="profile-section">
-    <h3 style="margin-bottom: 16px;">Мой профиль</h3>
-    <img id="profile-avatar-preview" class="avatar-large" src="/static/icon-192.png" alt="Аватар">
-    <input type="file" id="avatar-input" accept="image/*" onchange="onAvatarSelected(event)" style="display: none;">
-    <button onclick="document.getElementById('avatar-input').click()" style="width: auto; padding: 10px 20px; font-size: 14px; margin-bottom: 16px;"> Сменить аватар</button>
-    <textarea id="profile-bio" placeholder="Расскажи о себе (до 200 символов)" maxlength="200" style="min-height: 80px;"></textarea>
-    <button onclick="saveProfile()" style="margin-top: 12px;">Сохранить профиль</button>
-    <button onclick="closeProfile()" style="background: #999; margin-top: 8px;">Закрыть</button>
-    <div id="profile-success" style="color: green; margin-top: 12px; display: none;">Профиль сохранён!</div>
-    <div id="profile-error" style="color: red; margin-top: 8px; display: none;"></div>
-</div>
 
     <!-- Модальное окно настроек -->
     <div id="settings-modal" class="modal-overlay" onclick="closeSettingsOnOverlay(event)">
@@ -582,13 +629,19 @@ body.dark-mode .share-options { background: #2a2a2a; }
 
             <div class="setting-item">
                 <span>👤 Мой профиль</span>
-                <button style="width:auto; padding:8px 16px; font-size:14px;" onclick="openProfile()">Редактировать</button>
+                <button style="width:auto; padding:8px 16px; font-size:14px;" onclick="openProfileModal()">Редактировать</button>
+            </div>
+
+            <div class="setting-item" id="admin-setting-item" style="display: none;">
+                <span>👑 Админ-панель</span>
+                <button style="width:auto; padding:8px 16px; font-size:14px;" onclick="openAdminPanel()">Открыть</button>
             </div>
 
             <div class="setting-item">
-                <span>📥 Экспорт заметок (JSON)</span>
+                <span>💾 Экспорт заметок (JSON)</span>
                 <button style="width:auto; padding:8px 16px; font-size:14px;" onclick="exportNotes()">Скачать</button>
             </div>
+
 
             <p style="margin-top: 20px; font-size: 12px; color: #999; text-align: center;">
                 Семейный блокнот v2.1
@@ -596,6 +649,38 @@ body.dark-mode .share-options { background: #2a2a2a; }
         </div>
     </div>
 
+
+    <!-- Модальное окно админ-панели -->
+<div id="admin-modal" class="share-modal" onclick="closeAdminModal(event)">
+    <div class="modal-content" style="max-width: 700px;">
+        <div class="modal-header">
+            <h2>👑 Админ-панель</h2>
+            <button class="modal-close" onclick="closeAdminModal()">&times;</button>
+        </div>
+
+        <div id="admin-stats" class="admin-stats"></div>
+
+        <h3 style="margin: 16px 0 10px;">👥 Пользователи</h3>
+        <div id="admin-users-list"></div>
+    </div>
+</div>
+
+<!-- Модальное окно профиля -->
+<div id="profile-modal" class="share-modal" onclick="closeProfileModal(event)">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>👤 Мой профиль</h2>
+            <button class="modal-close" onclick="closeProfileModal()">&times;</button>
+        </div>
+        <img id="profile-avatar-preview" class="avatar-large" src="/static/icon-192.png" alt="Аватар">
+        <input type="file" id="avatar-input" accept="image/*" onchange="onAvatarSelected(event)" style="display: none;">
+        <button onclick="document.getElementById('avatar-input').click()" style="width: auto; padding: 10px 20px; font-size: 14px; margin-bottom: 16px;">📷 Сменить аватар</button>
+        <textarea id="profile-bio" placeholder="Расскажи о себе (до 200 символов)" maxlength="200" style="min-height: 80px;"></textarea>
+        <div id="profile-success" style="color: green; margin-top: 12px; display: none;">Профиль сохранён!</div>
+        <div id="profile-error" style="color: red; margin-top: 8px; display: none;"></div>
+        <button onclick="saveProfile()" style="margin-top: 12px;">Сохранить профиль</button>
+    </div>
+</div>
 
 <!-- Модальное окно общего доступа -->
 <div id="share-modal" class="share-modal" onclick="closeShareModal(event)">
@@ -724,11 +809,15 @@ body.dark-mode .share-options { background: #2a2a2a; }
                 setCookie('session_id', data.session_id, 30);
                 localStorage.setItem('username', username);
                 currentUserId = data.user_id;  // ← Используем user_id из ответа
+                currentIsAdmin = data.is_admin;
+                document.getElementById('admin-setting-item').style.display = data.is_admin ? 'flex' : 'none';
                 document.getElementById('auth-section').classList.add('hidden');
                 document.getElementById('app-section').classList.add('visible');
                 document.getElementById('current-username').textContent = username;
+                loadProfile()
                 loadCategories();
                 loadNotes();
+
 
             })
             .catch(function(err) { showError(err.message); });
@@ -758,6 +847,8 @@ body.dark-mode .share-options { background: #2a2a2a; }
                 setCookie('session_id', data.session_id, 30);
                 localStorage.setItem('username', data.username);
                 currentUserId = data.user_id;
+                currentIsAdmin = data.is_admin;
+                document.getElementById('admin-setting-item').style.display = data.is_admin ? 'flex' : 'none';
                 document.getElementById('auth-section').classList.add('hidden');
                 document.getElementById('app-section').classList.add('visible');
                 document.getElementById('current-username').textContent = data.username;
@@ -789,6 +880,8 @@ body.dark-mode .share-options { background: #2a2a2a; }
                 .then(function(data) {
                     localStorage.setItem('username', data.username);
                     currentUserId = data.id;
+                    currentIsAdmin = data.is_admin;
+                    document.getElementById('admin-setting-item').style.display = data.is_admin ? 'flex' : 'none';
                     document.getElementById('current-username').textContent = data.username;
                     document.getElementById('auth-section').classList.add('hidden');
                     document.getElementById('app-section').classList.add('visible');
@@ -1401,32 +1494,26 @@ function loadProfile() {
     .catch(function() {});
 }
 
-var sessionId = getCookie('session_id');
-if (sessionId) {
-    checkAuth();
-    // loadProfile() вызывается внутри checkAuth() после успешной авторизации
-}
-
-function openProfile() {
+function openProfileModal() {
     closeSettings();
-    document.getElementById('profile-section').classList.add('show');
+    document.getElementById('profile-modal').classList.add('show');
     document.getElementById('profile-success').style.display = 'none';
     document.getElementById('profile-error').style.display = 'none';
 
-    // Загружаем текущие данные
     fetch('/profile', {credentials: 'include'})
     .then(function(r) { return r.json(); })
     .then(function(data) {
         document.getElementById('profile-bio').value = data.bio || '';
         if (data.avatar) {
-               document.getElementById('profile-avatar-preview').src = '/avatars/' + data.avatar;
+            document.getElementById('profile-avatar-preview').src = '/avatars/' + data.avatar;
         }
     })
     .catch(function() {});
 }
 
-function closeProfile() {
-    document.getElementById('profile-section').classList.remove('show');
+function closeProfileModal(event) {
+    if (event && event.target !== document.getElementById('profile-modal')) return;
+    document.getElementById('profile-modal').classList.remove('show');
 }
 
 function onAvatarSelected(event) {
@@ -1494,6 +1581,89 @@ function saveProfile() {
         document.getElementById('profile-success').style.display = 'none';
     });
 }
+
+// === АДМИН-ПАНЕЛЬ ===
+
+var currentIsAdmin = false;
+
+function openAdminPanel() {
+    closeSettings();
+    document.getElementById('admin-modal').classList.add('show');
+    loadAdminStats();
+    loadAdminUsers();
+}
+
+function closeAdminModal(event) {
+    if (event && event.target !== document.getElementById('admin-modal')) return;
+    document.getElementById('admin-modal').classList.remove('show');
+}
+
+function loadAdminStats() {
+    fetch('/admin/stats', {credentials: 'include'})
+    .then(function(r) {
+        if (!r.ok) throw new Error('Нет доступа');
+        return r.json();
+    })
+    .then(function(stats) {
+        document.getElementById('admin-stats').innerHTML =
+            '<div class="stat-card"><span class="stat-number">' + stats.users_count + '</span><span class="stat-label">👥 Пользователи</span></div>' +
+            '<div class="stat-card green"><span class="stat-number">' + stats.notes_count + '</span><span class="stat-label">📝 Заметки</span></div>' +
+            '<div class="stat-card blue"><span class="stat-number">' + stats.photos_count + '</span><span class="stat-label">📸 Фото</span></div>' +
+            '<div class="stat-card orange"><span class="stat-number">' + stats.avatars_count + '</span><span class="stat-label">👤 Аватарки</span></div>';
+    })
+    .catch(function(err) {
+        document.getElementById('admin-stats').innerHTML = '<p style="color:red;">' + err.message + '</p>';
+    });
+}
+
+function loadAdminUsers() {
+    fetch('/admin/users', {credentials: 'include'})
+    .then(function(r) {
+        if (!r.ok) throw new Error('Нет доступа');
+        return r.json();
+    })
+    .then(function(users) {
+        var html = users.map(function(u) {
+            var badge = u.is_admin ? '<span class="admin-badge">👑 админ</span>' : '';
+            var date = new Date(u.created_at.replace(' ', 'T')).toLocaleDateString('ru-RU');
+            var deleteBtn = '';
+            if (u.id !== currentUserId) {
+                deleteBtn = '<button class="admin-delete-btn" onclick="adminDeleteUser(' + u.id + ', \'' + u.username + '\')">🗑️ Удалить</button>';
+            }
+            return '<div class="admin-user-row">' +
+                '<div class="admin-user-info">' +
+                    '<div class="admin-user-name">' + u.username + badge + '</div>' +
+                    '<div class="admin-user-meta">📝 ' + u.notes_count + ' заметок · регистрация ' + date + '</div>' +
+                '</div>' +
+                deleteBtn +
+            '</div>';
+        }).join('');
+        document.getElementById('admin-users-list').innerHTML = html;
+    })
+    .catch(function(err) {
+        document.getElementById('admin-users-list').innerHTML = '<p style="color:red;">' + err.message + '</p>';
+    });
+}
+
+function adminDeleteUser(userId, username) {
+    if (!confirm('Удалить пользователя ' + username + ' вместе со ВСЕМИ его заметками и фото? Это нельзя отменить!')) return;
+
+    fetch('/admin/users/' + userId, {
+        method: 'DELETE',
+        credentials: 'include'
+    })
+    .then(function(r) {
+        if (r.ok) {
+            loadAdminStats();
+            loadAdminUsers();
+            loadNotes()
+        } else {
+            return r.json().then(function(data) { throw new Error(data.detail || 'Ошибка'); });
+        }
+    })
+    .catch(function(err) { alert(err.message); });
+}
+
 
     </script>
 </body>
