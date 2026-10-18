@@ -11,6 +11,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <style>
 
+
       /* === Админ-панель === */
 .admin-stats {
     display: grid;
@@ -165,38 +166,236 @@ body.dark-mode .profile-section { background: #1e1e1e; }
         .btn-upload { background: #9C27B0 !important; width: auto; padding: 10px 20px; font-size: 14px; margin-bottom: 8px; }
         .btn-remove-image { background: #ff9800 !important; width: auto; padding: 6px 12px; font-size: 12px; margin-top: 8px; }
 
-        .note {
-            background: white;
-            padding: 12px;
-            margin-bottom: 10px;
-            border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            border-left: 5px solid #ccc;
-            transition: background 0.3s, color 0.3s;
-        }
-        .note h3 { margin-bottom: 6px; color: #222; transition: color 0.3s; }
-        .note p { color: #555; white-space: pre-wrap; transition: color 0.3s; }
-        .note .meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-        .note .date { font-size: 12px; color: #999; transition: color 0.3s; }
-        .note .category-badge {
-            display: inline-block;
-            padding: 3px 10px;
-            border-radius: 12px;
-            font-size: 12px;
-            color: white;
-            font-weight: 500;
-        }
-        .note .buttons { display: flex; gap: 8px; margin-top: 8px; justify-content: flex-start; }
-        .note .buttons button { flex: none; width: auto; padding: 8px 16px; font-size: 14px; }
+        /* === КОМПАКТНЫЕ КАРТОЧКИ ЗАМЕТОК === */
+.note {
+    background: white;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    border-left: 4px solid #ccc;
+    transition: box-shadow 0.2s;
+    cursor: pointer;
+    overflow: hidden;
+}
+.note:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+.note.expanded {
+    cursor: default;
+}
 
-        .note-image {
-            max-width: 100%;
-            max-height: 300px;
-            border-radius: 8px;
-            margin-top: 8px;
-            cursor: pointer;
-            display: block;
-        }
+/* Стрелочка раскрытия */
+.note .toggle-arrow {
+    font-size: 14px;
+    color: #999;
+    margin-left: 8px;
+    transition: transform 0.3s ease;
+    display: inline-block;
+}
+.note.expanded .toggle-arrow {
+    transform: rotate(180deg);
+}
+
+/* Мета-информация */
+.note .meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.note .date {
+    font-size: 11px;
+    color: #999;
+    white-space: nowrap;
+}
+.note .category-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    color: white;
+    font-weight: 500;
+}
+.note .access-icon {
+    font-size: 12px;
+}
+
+/* Заголовок */
+.note h3 {
+    margin: 0 0 4px 0;
+    color: #222;
+    font-size: 16px;
+    line-height: 1.3;
+    display: flex;
+    align-items: center;
+}
+
+/* Превью текста */
+.note .note-preview {
+    color: #666;
+    font-size: 14px;
+    line-height: 1.4;
+    margin: 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Полный текст с анимацией */
+.note .note-full {
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    transition: max-height 0.4s ease, opacity 0.3s ease, margin 0.3s ease;
+    color: #555;
+    font-size: 14px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    margin: 0;
+    padding: 0;
+}
+.note.expanded .note-full {
+    max-height: 2000px;
+    opacity: 1;
+    margin: 8px 0 0 0;
+    padding-top: 8px;
+    border-top: 1px dashed #eee;
+}
+.note.expanded .note-preview { display: none; }
+
+/* Контейнер для фото */
+.note .note-image-container {
+    display: flex;
+    align-items: flex-start;
+    margin-top: 4px;
+}
+.note .note-text-container {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Миниатюра фото */
+.note .note-thumb {
+    width: 70px;
+    height: 70px;
+    object-fit: cover;
+    border-radius: 6px;
+    margin-left: 10px;
+    flex-shrink: 0;
+    transition: transform 0.2s;
+}
+.note .note-thumb:hover {
+    transform: scale(1.05);
+}
+
+/* Большое фото (раскрытое) */
+.note .note-thumb-large {
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    transition: max-height 0.4s ease, opacity 0.3s ease, margin 0.3s ease;
+    max-width: 100%;
+    border-radius: 8px;
+    margin: 0;
+    cursor: pointer;
+}
+.note.expanded .note-thumb-large {
+    max-height: 500px;
+    opacity: 1;
+    margin-top: 8px;
+}
+.note.expanded .note-thumb { display: none; }
+
+/* Кнопки */
+
+/* Кнопки скрыты по умолчанию */
+.note .buttons {
+    display: none;
+    gap: 6px;
+    margin-top: 8px;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+}
+/* Показываем кнопки только в раскрытой карточке */
+.note.expanded .buttons {
+    display: flex;
+}
+
+
+.note .buttons button {
+    flex: none;
+    width: auto;
+    padding: 5px 10px;
+    font-size: 12px;
+    border-radius: 6px;
+    opacity: 0.85;
+    transition: opacity 0.2s;
+}
+.note .buttons button:hover {
+    opacity: 1;
+}
+.note .btn-remove-image {
+    background: #ff9800 !important;
+    width: auto;
+    padding: 4px 10px;
+    font-size: 11px;
+    margin-top: 4px;
+    opacity: 0.85;
+}
+.note .btn-remove-image:hover {
+    opacity: 1;
+}
+.note .btn-remove-image {
+    background: #ff9800 !important;
+    width: auto;
+    padding: 4px 10px;
+    font-size: 11px;
+    margin-top: 4px;
+}
+.note-owner {
+    font-size: 11px;
+    color: #888;
+    margin-left: 6px;
+}
+
+/* Счётчик заметок */
+.notes-counter {
+    font-size: 13px;
+    color: #888;
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    background: #f5f5f5;
+    border-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.notes-counter strong {
+    color: #4CAF50;
+}
+
+/* Тёмная тема */
+body.dark-mode .note { background: #1e1e1e; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+body.dark-mode .note h3 { color: #fff; }
+body.dark-mode .note .note-preview { color: #aaa; }
+body.dark-mode .note .note-full { color: #ccc; border-top-color: #333; }
+body.dark-mode .note .date { color: #777; }
+body.dark-mode .note .toggle-arrow { color: #666; }
+body.dark-mode .notes-counter { background: #1e1e1e; color: #aaa; }
+body.dark-mode .notes-counter strong { color: #81C784; }
+
+/* Тёмная тема */
+body.dark-mode .note { background: #1e1e1e; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+body.dark-mode .note h3 { color: #fff; }
+body.dark-mode .note .note-preview { color: #aaa; }
+body.dark-mode .note .note-full { color: #ccc; border-top-color: #333; }
+body.dark-mode .note .date { color: #777; }
+body.dark-mode .note .note-thumb-large { display: block; }
 
         #error { color: red; margin-bottom: 12px; display: none; padding: 8px; background: #ffebee; border-radius: 4px; }
         #success { color: green; margin-bottom: 12px; display: none; padding: 8px; background: #e8f5e9; border-radius: 4px; }
@@ -1137,7 +1336,8 @@ body.dark-mode .share-options { background: #2a2a2a; }
             } else {
                 removeImagePreview();
             }
-            window.scrollTo(0, 0);
+            // Прокручиваем к форме редактирования вместо scrollTo(0, 0)
+            document.getElementById('title').scrollIntoView({behavior: 'smooth', block: 'start'});
         }
 
         function cancelEdit() {
@@ -1150,70 +1350,120 @@ body.dark-mode .share-options { background: #2a2a2a; }
             removeImagePreview();
         }
 
-        function loadNotes() {
-            hideMessages();
-            var query = document.getElementById('search').value;
-            var params = [];
-            if (query) params.push('q=' + encodeURIComponent(query));
-            if (currentCategoryFilter) params.push('category=' + encodeURIComponent(currentCategoryFilter));
-            var url = '/notes' + (params.length ? '?' + params.join('&') : '');
-            fetch(url, {credentials: 'include'})
-            .then(function(response) {
-                if (response.status === 401) {
-                    showError('Сессия истекла, войди снова');
-                    eraseCookie('session_id'); location.reload();
-                    return [];
-                }
-                return response.json();
-            })
-            .then(function(notes) {
-                if (!notes) return;
-                var container = document.getElementById('notes');
-                if (notes.length === 0) {
-                    container.innerHTML = '<p style="color:#999; text-align:center;">' + (query || currentCategoryFilter ? 'Ничего не найдено' : 'Заметок пока нет') + '</p>';
-                    return;
-                }
-                container.innerHTML = notes.map(function(n) {
-                    var date = new Date(n.created_at).toLocaleString('ru-RU');
-                    var categoryHtml = n.category ? '<span class="category-badge" style="background:' + getCategoryColor(n.category) + '">' + n.category + '</span>' : '';
-                    var imageHtml = n.image ? '<img class="note-image" src="/uploads/' + n.image + '" onclick="openImageModal(\'/uploads/' + n.image + '\')"><button class="btn-remove-image" onclick="removeNoteImage(' + n.id + ')">Удалить фото</button>' : '';
-
-                    // Иконка доступа и имя владельца
-                    var accessIcon = '';
-                    var ownerInfo = '';
-                    if (n.user_id === currentUserId) {
-                        // Моя заметка
-                        if (n.is_public == 1) {
-                            accessIcon = '<span style="color:#4CAF50; font-size:14px;" title="Общая заметка">🌐</span>';
-                        }
-                    } else {
-                        // Чужая заметка
-                        ownerInfo = '<span class="note-owner">от ' + (n.owner_username || 'неизвестно') + '</span>';
-                        if (n.is_public == 1) {
-                            accessIcon = '<span style="color:#4CAF50; font-size:14px;" title="Общая заметка">🌐</span>';
-                        } else {
-                            accessIcon = '<span style="color:#2196F3; font-size:14px;" title="Поделились со мной">👥</span>';
-                        }
-                    }
-
-                    // Кнопка "Поделиться" только для владельца
-                    var shareButton = n.user_id === currentUserId ?
-                        '<button class="btn-share" style="flex:none; width:auto; padding:8px 16px; font-size:14px; background:#9C27B0 !important;" onclick="openShareModal(' + n.id + ')">👥 Поделиться</button>' : '';
-
-                    return '<div class="note" style="border-left-color:' + (n.category ? getCategoryColor(n.category) : '#ccc') + '">' +
-                        '<div class="meta">' + categoryHtml + accessIcon + ownerInfo + '<span class="date">' + date + '</span></div>' +
-                        '<h3>' + n.title + '</h3>' +
-                        '<p>' + n.content + '</p>' +
-                        imageHtml +
-                        '<div class="buttons">' +
-                            (n.user_id === currentUserId ? '<button class="btn-edit" onclick="editNote(' + n.id + ', \'' + n.title.replace(/'/g, "\\'") + '\', \'' + n.content.replace(/'/g, "\\'").replace(/\n/g, "\\n") + '\', \'' + (n.category || '').replace(/'/g, "\\'") + '\', \'' + (n.image || '').replace(/'/g, "\\'") + '\', ' + (n.is_public || 0) + ')">Изменить</button>' : '') +
-                            (n.user_id === currentUserId ? '<button class="btn-delete" onclick="deleteNote(' + n.id + ')">Удалить</button>' : '') +
-                            shareButton +
-                        '</div></div>';
-                }).join('');
-            })
-            .catch(function() { showError('Ошибка загрузки заметок'); });
+ function loadNotes() {
+    hideMessages();
+    var query = document.getElementById('search').value;
+    var params = [];
+    if (query) params.push('q=' + encodeURIComponent(query));
+    if (currentCategoryFilter) params.push('category=' + encodeURIComponent(currentCategoryFilter));
+    var url = '/notes' + (params.length ? '?' + params.join('&') : '');
+    fetch(url, {credentials: 'include'})
+    .then(function(response) {
+        if (response.status === 401) {
+            showError('Сессия истекла, войди снова');
+            eraseCookie('session_id'); location.reload();
+            return [];
         }
+        return response.json();
+    })
+    .then(function(notes) {
+        if (!notes) return;
+        var container = document.getElementById('notes');
+
+        // Счётчик заметок
+        var counterHtml = '<div class="notes-counter">' +
+            '<span>📋 Всего: <strong>' + notes.length + '</strong> ' +
+            (notes.length === 1 ? 'заметка' : (notes.length < 5 ? 'заметки' : 'заметок')) + '</span>' +
+            (query || currentCategoryFilter ? '<span style="font-size:12px;">🔍 фильтр активен</span>' : '') +
+        '</div>';
+
+        if (notes.length === 0) {
+            container.innerHTML = counterHtml + '<p style="color:#999; text-align:center; padding: 20px;">' + (query || currentCategoryFilter ? 'Ничего не найдено' : 'Заметок пока нет') + '</p>';
+            return;
+        }
+
+        var notesHtml = notes.map(function(n) {
+            var date = new Date(n.created_at).toLocaleString('ru-RU');
+            var categoryHtml = n.category ? '<span class="category-badge" style="background:' + getCategoryColor(n.category) + '">' + n.category + '</span>' : '';
+
+            var accessIcon = '';
+            var ownerInfo = '';
+            if (n.user_id === currentUserId) {
+                if (n.is_public == 1) {
+                    accessIcon = '<span class="access-icon" title="Общая заметка">🌐</span>';
+                }
+            } else {
+                ownerInfo = '<span class="note-owner">от ' + (n.owner_username || 'неизвестно') + '</span>';
+                if (n.is_public == 1) {
+                    accessIcon = '<span class="access-icon" title="Общая заметка">🌐</span>';
+                } else {
+                    accessIcon = '<span class="access-icon" title="Поделились со мной">👥</span>';
+                }
+            }
+
+            var previewText = n.content || '';
+            var preview = previewText.length > 120 ? previewText.substring(0, 120) + '...' : previewText;
+            var fullEscaped = (n.content || '').replace(/'/g, "\\'");
+
+            var thumbHtml = n.image ? '<img class="note-thumb" src="/uploads/' + n.image + '" onclick="event.stopPropagation(); openImageModal(\'/uploads/' + n.image + '\')">' : '';
+            var largeHtml = n.image ? '<img class="note-thumb-large" src="/uploads/' + n.image + '" onclick="event.stopPropagation(); openImageModal(\'/uploads/' + n.image + '\')">' : '';
+            var shareButton = n.user_id === currentUserId ?
+                '<button class="btn-share" style="flex:none; width:auto; padding:6px 12px; font-size:12px; background:#9C27B0 !important;" onclick="event.stopPropagation(); openShareModal(' + n.id + ')"> Поделиться</button>' : '';
+
+                       // ПРАВИЛЬНОЕ экранирование для HTML-атрибутов (кавычки И переносы строк)
+            var titleEscaped = n.title.replace(/'/g, "\\'").replace(/\n/g, "\\n").replace(/\r/g, "");
+            var fullEscaped = (n.content || '').replace(/'/g, "\\'").replace(/\n/g, "\\n").replace(/\r/g, "");
+            var categoryEscaped = (n.category || '').replace(/'/g, "\\'").replace(/\n/g, "\\n").replace(/\r/g, "");
+            var imageEscaped = (n.image || '').replace(/'/g, "\\'").replace(/\n/g, "\\n").replace(/\r/g, "");
+
+            var editButton = n.user_id === currentUserId ?
+                '<button class="btn-edit" onclick="event.stopPropagation(); editNote(' + n.id + ', \'' + titleEscaped + '\', \'' + fullEscaped + '\', \'' + categoryEscaped + '\', \'' + imageEscaped + '\', ' + (n.is_public || 0) + ')">Изменить</button>' : '';
+
+            var deleteButton = n.user_id === currentUserId ?
+                '<button class="btn-delete" onclick="event.stopPropagation(); deleteNote(' + n.id + ')">Удалить</button>' : '';
+
+            var shareButton = n.user_id === currentUserId ?
+                '<button class="btn-share" style="flex:none; width:auto; padding:5px 10px; font-size:12px; background:#9C27B0 !important; opacity:0.85;" onclick="event.stopPropagation(); openShareModal(' + n.id + ')"> Поделиться</button>' : '';
+
+            return '<div class="note" style="border-left-color:' + (n.category ? getCategoryColor(n.category) : '#ccc') + '" onclick="toggleNote(this, event)">' +
+                '<div class="meta">' + categoryHtml + accessIcon + ownerInfo + '<span class="date">' + date + '</span><span class="toggle-arrow">▼</span></div>' +
+                '<h3>' + n.title + '</h3>' +
+                '<div class="note-image-container">' +
+                    '<div class="note-text-container">' +
+                        '<p class="note-preview">' + preview + '</p>' +
+                        '<p class="note-full">' + n.content + '</p>' +
+                    '</div>' +
+                    thumbHtml +
+                '</div>' +
+                largeHtml +
+                '<div class="buttons">' +
+                    editButton +
+                    deleteButton +
+                    shareButton +
+                '</div></div>';
+        }).join('');
+
+        container.innerHTML = counterHtml + notesHtml;
+    })
+    .catch(function() { showError('Ошибка загрузки заметок'); });
+}
+
+function toggleNote(element, event) {
+    if (!event) return; // Защита от ошибок
+
+    var target = event.target;
+    // Если клик был по кнопке, картинке или внутри любого блока с кнопками/картинками
+    if (target.tagName === 'BUTTON' ||
+        target.tagName === 'IMG' ||
+        target.closest('button') ||
+        target.closest('.note-thumb') ||
+        target.closest('.note-thumb-large')) {
+        return; // Не сворачиваем/не разворачиваем
+    }
+
+    element.classList.toggle('expanded');
+}
+
 
         function deleteNote(id) {
             if (!confirm('Удалить заметку?')) return;
