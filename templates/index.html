@@ -887,12 +887,36 @@ body.dark-mode .share-options { background: #2a2a2a; }
         <input type="file" id="avatar-input" accept="image/*" onchange="onAvatarSelected(event)" style="display: none;">
         <button onclick="document.getElementById('avatar-input').click()" style="width: auto; padding: 10px 20px; font-size: 14px; margin-bottom: 16px;">📷 Сменить аватар</button>
         <textarea id="profile-bio" placeholder="Расскажи о себе (до 200 символов)" maxlength="200" style="min-height: 80px;"></textarea>
+
+        <!-- === ЛИЧНАЯ СТАТИСТИКА === -->
+        <div id="my-stats-block" style="margin-top: 20px; display: none;">
+            <h3 style="font-size: 16px; margin-bottom: 12px; color: #333;">📊 Твоя статистика</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div class="stat-card blue" style="padding: 12px;">
+                    <span class="stat-number" style="font-size: 24px;" id="stat-notes">0</span>
+                    <span class="stat-label" style="font-size: 12px;">📝 Заметок</span>
+                </div>
+                <div class="stat-card green" style="padding: 12px;">
+                    <span class="stat-number" style="font-size: 24px;" id="stat-photos">0</span>
+                    <span class="stat-label" style="font-size: 12px;">📸 С фото</span>
+                </div>
+                <div class="stat-card orange" style="padding: 12px;">
+                    <span class="stat-number" style="font-size: 24px;" id="stat-shared">0</span>
+                    <span class="stat-label" style="font-size: 12px;">👥 Со мной поделились</span>
+                </div>
+                <div class="stat-card" style="padding: 12px;">
+                    <span class="stat-number" style="font-size: 24px;" id="stat-days">1</span>
+                    <span class="stat-label" style="font-size: 12px;">📅 Дней с нами</span>
+                </div>
+            </div>
+        </div>
+        <!-- ========================== -->
+
         <div id="profile-success" style="color: green; margin-top: 12px; display: none;">Профиль сохранён!</div>
         <div id="profile-error" style="color: red; margin-top: 8px; display: none;"></div>
         <button onclick="saveProfile()" style="margin-top: 12px;">Сохранить профиль</button>
     </div>
 </div>
-
 <!-- Модальное окно общего доступа -->
 <div id="share-modal" class="share-modal" onclick="closeShareModal(event)">
     <div class="modal-content">
@@ -1082,34 +1106,70 @@ body.dark-mode .share-options { background: #2a2a2a; }
             });
         }
 
-        function checkAuth() {
-            var sessionId = getCookie('session_id');
-            var savedUsername = localStorage.getItem('username');
-            if (sessionId && savedUsername) {
-                fetch('/me', {credentials: 'include'})
-                .then(function(response) {
-                    if (response.ok) return response.json();
-                    else throw new Error('Сессия невалидна');
-                })
-                .then(function(data) {
-                    localStorage.setItem('username', data.username);
-                    currentUserId = data.id;
-                    currentIsAdmin = data.is_admin;
-                    document.getElementById('admin-setting-item').style.display = data.is_admin ? 'flex' : 'none';
-                    document.getElementById('current-username').textContent = data.username;
-                    document.getElementById('settings-btn').style.display = 'block';  // ← ДОБАВЬ ЭТУ СТРОКУ
-                    document.getElementById('auth-section').classList.add('hidden');
-                    document.getElementById('app-section').classList.add('visible');
-                    loadCategories();
-                    loadNotes();
-                    loadProfile(); // ← ДОБАВЬ ЭТУ СТРОКУ СЮДА
-                })
-                .catch(function() {
-                    eraseCookie('session_id');
-                    localStorage.removeItem('username');
-                });
-            }
+function checkAuth() {
+    var sessionId = getCookie('session_id');
+    var savedUsername = localStorage.getItem('username');
+
+    console.log('🔍 checkAuth запущен');
+    console.log('   sessionId:', sessionId ? 'ЕСТЬ (' + sessionId.substring(0, 15) + '...)' : 'НЕТ');
+    console.log('   savedUsername:', savedUsername || 'НЕТ');
+
+    if (!sessionId) {
+        console.log('❌ Нет session_id, показываем форму входа');
+        document.getElementById('auth-section').classList.remove('hidden');
+        document.getElementById('app-section').classList.remove('visible');
+        return;
+    }
+
+    if (!savedUsername) {
+        console.log('⚠️ Нет savedUsername, но есть sessionId — пробуем восстановить через /me');
+    }
+
+    console.log('📡 Отправляем запрос к /me...');
+
+    fetch('/me', {credentials: 'include'})
+    .then(function(response) {
+        console.log('📡 Ответ от /me, статус:', response.status);
+
+        if (response.status === 401) {
+            console.log('❌ Сессия невалидна (401), очищаем куки');
+            eraseCookie('session_id');
+            localStorage.removeItem('username');
+            document.getElementById('auth-section').classList.remove('hidden');
+            document.getElementById('app-section').classList.remove('visible');
+            return;
         }
+
+        if (!response.ok) {
+            console.log('❌ Ошибка сервера:', response.status);
+            return;
+        }
+
+        return response.json();
+    })
+    .then(function(data) {
+        if (!data) return;
+
+        console.log('✅ Авторизация успешна! user_id:', data.id, 'username:', data.username);
+
+        localStorage.setItem('username', data.username);
+        currentUserId = data.id;
+        currentIsAdmin = data.is_admin;
+
+        document.getElementById('admin-setting-item').style.display = data.is_admin ? 'flex' : 'none';
+        document.getElementById('current-username').textContent = data.username;
+        document.getElementById('settings-btn').style.display = 'block';
+        document.getElementById('auth-section').classList.add('hidden');
+        document.getElementById('app-section').classList.add('visible');
+
+        loadCategories();
+        loadNotes();
+        loadProfile();
+    })
+    .catch(function(err) {
+        console.error('❌ Ошибка в checkAuth:', err);
+    });
+}
 
         function loadCategories() {
             fetch('/categories', {credentials: 'include'})
@@ -1766,7 +1826,9 @@ function openProfileModal() {
     document.getElementById('profile-modal').classList.add('show');
     document.getElementById('profile-success').style.display = 'none';
     document.getElementById('profile-error').style.display = 'none';
+    document.getElementById('my-stats-block').style.display = 'none'; // Скрываем до загрузки
 
+    // 1. Загружаем данные профиля
     fetch('/profile', {credentials: 'include'})
     .then(function(r) { return r.json(); })
     .then(function(data) {
@@ -1776,6 +1838,23 @@ function openProfileModal() {
         }
     })
     .catch(function() {});
+
+    // 2. Загружаем статистику
+    fetch('/my-stats', {credentials: 'include'})
+    .then(function(r) {
+        if (r.ok) return r.json();
+        throw new Error('Ошибка загрузки статистики');
+    })
+    .then(function(stats) {
+        document.getElementById('stat-notes').textContent = stats.my_notes;
+        document.getElementById('stat-photos').textContent = stats.my_photos;
+        document.getElementById('stat-shared').textContent = stats.shared_with_me;
+        document.getElementById('stat-days').textContent = stats.days_active;
+        document.getElementById('my-stats-block').style.display = 'block'; // Показываем блок
+    })
+    .catch(function(err) {
+        console.log('Не удалось загрузить статистику:', err);
+    });
 }
 
 function closeProfileModal(event) {
@@ -1931,6 +2010,12 @@ function adminDeleteUser(userId, username) {
     .catch(function(err) { alert(err.message); });
 }
 
+
+    // Проверяем авторизацию при загрузке страницы
+    var sessionId = getCookie('session_id');
+    if (sessionId) {
+        checkAuth();
+    }
 
     </script>
 </body>

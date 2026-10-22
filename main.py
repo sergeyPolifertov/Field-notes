@@ -6,7 +6,8 @@ from database import (
     add_note, delete_note, update_note, get_note_by_id, get_note_image,
     share_note_with_users, get_shared_users, set_note_public,
     get_profile, create_profile, update_profile,
-    set_admin, is_admin, get_stats, get_all_users_with_stats, delete_user  # ← ДОБАВЛЕНО
+    set_admin, is_admin, get_stats, get_all_users_with_stats, delete_user,
+    get_connection# ← ДОБАВЛЕНО
 )
 import os
 import uuid
@@ -308,26 +309,29 @@ def admin_delete_user(user_id: int, session_id: Optional[str] = Cookie(None)):
 
 @app.get("/my-stats")
 def get_my_stats(session_id: Optional[str] = Cookie(None)):
-    """Личная статистика для любого пользователя"""
     user = get_current_user(session_id)
     if not user:
         raise HTTPException(status_code=401, detail="Не авторизован")
 
-    from database import get_connection
     conn = get_connection()
     cursor = conn.cursor()
 
     cursor.execute('SELECT COUNT(*) as count FROM notes WHERE user_id = ?', (user['id'],))
     my_notes = cursor.fetchone()['count']
 
-    cursor.execute('SELECT COUNT(*) as count FROM notes WHERE user_id = ? AND image != ""', (user['id'],))
+    cursor.execute('SELECT COUNT(*) as count FROM notes WHERE user_id = ? AND image != "" AND image IS NOT NULL', (user['id'],))
     my_photos = cursor.fetchone()['count']
 
     cursor.execute('SELECT COUNT(*) as count FROM shared_notes WHERE shared_with_user_id = ?', (user['id'],))
     shared_with_me = cursor.fetchone()['count']
 
-    cursor.execute('SELECT COUNT(*) as count FROM users')
-    total_users = cursor.fetchone()['count']
+    cursor.execute('''
+        SELECT CAST(julianday('now') - julianday(created_at) AS INTEGER) as days 
+        FROM users WHERE id = ?
+    ''', (user['id'],))
+    days_active = cursor.fetchone()['days']
+    if days_active < 1:
+        days_active = 1
 
     conn.close()
 
@@ -335,7 +339,7 @@ def get_my_stats(session_id: Optional[str] = Cookie(None)):
         'my_notes': my_notes,
         'my_photos': my_photos,
         'shared_with_me': shared_with_me,
-        'total_users': total_users
+        'days_active': days_active
     }
 
 

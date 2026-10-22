@@ -1,8 +1,8 @@
 import os
 import secrets
 import sqlite3
+import uuid
 from datetime import datetime, timedelta
-
 DB_NAME = "notebook.db"
 
 
@@ -196,14 +196,15 @@ def update_user_password(user_id: int, new_password_hash: str):
 
 # === Сессии ===
 
-def create_session(user_id: int, days: int = 30):
-    session_id = secrets.token_urlsafe(32)
-    expires_at = datetime.now() + timedelta(days=days)
+def create_session(user_id: int) -> str:
+    session_id = str(uuid.uuid4())
     conn = get_connection()
     cursor = conn.cursor()
+    # Сессия живёт 30 дней
+    expires_at = (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d %H:%M:%S')
     cursor.execute(
         'INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)',
-        (session_id, user_id, expires_at.isoformat())
+        (session_id, user_id, expires_at)
     )
     conn.commit()
     conn.close()
