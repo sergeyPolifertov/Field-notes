@@ -33,6 +33,8 @@ from database import (
     share_note_with_users, get_shared_users, set_note_public
 )
 
+APP_VERSION = "2.3.0"
+
 load_dotenv()
 
 app = FastAPI(title="Семейный Блокнот")
@@ -119,7 +121,11 @@ def get_current_user(session_id: Optional[str]):
 # === Страницы ===
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    return templates.TemplateResponse(request=request, name="index.html")
+    return templates.TemplateResponse(
+        request=request,
+        name="index.html",
+        context={"version": APP_VERSION}  # Передаем версию в шаблон
+    )
 
 
 # === Авторизация ===
