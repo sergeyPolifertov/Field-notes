@@ -789,7 +789,7 @@ body.dark-mode .share-options { background: #2a2a2a; }
         <textarea id="content" placeholder="Текст заметки..."></textarea>
 
         <div class="category-input-wrapper">
-            <input type="text" id="category" placeholder="Категория (Авто, Дача, Хобби или своя...)"
+            <input type="text" id="category" placeholder="Теги через запятую (например: дача, ремонт, лето)"
                    oninput="onCategoryInput()" onfocus="onCategoryInput()">
             <div id="category-suggestions" class="category-suggestions"></div>
         </div>
@@ -950,13 +950,13 @@ body.dark-mode .share-options { background: #2a2a2a; }
         var currentUserId = null;
         var searchTimeout = null;
         var currentImageFilename = '';
-        var defaultCategories = ['Авто', 'Работа', 'Дом', 'Покупки', 'Личное', 'Здоровье', 'Идеи', 'Важное', 'Дача', 'Хобби'];
+        var defaultCategories = [];
 
-        var categoryColors = {
-            'Авто': '#2196F3', 'Работа': '#607D8B', 'Дом': '#4CAF50', 'Покупки': '#FF9800',
-            'Личное': '#9C27B0', 'Здоровье': '#E91E63', 'Идеи': '#00BCD4', 'Важное': '#F44336',
-            'Дача': '#8BC34A', 'Хобби': '#FF5722'
-        };
+
+      function parseTags(tagsString) {
+    if (!tagsString) return [];
+    return tagsString.split(',').map(t => t.trim()).filter(t => t.length > 0);
+}
 
         function getCategoryColor(category) {
             if (categoryColors[category]) return categoryColors[category];
@@ -1181,48 +1181,85 @@ function checkAuth() {
             .catch(function() {});
         }
 
-        function renderFilters() {
-            var container = document.getElementById('filters');
-            var allCats = defaultCategories.concat(allCategories);
-            allCats = allCats.filter(function(c, i, arr) { return arr.indexOf(c) === i; });
-            var html = '<button class="filter-btn ' + (currentCategoryFilter === '' ? 'active' : '') + '" onclick="setCategoryFilter(\'\')">Все</button>';
-            allCats.forEach(function(cat) {
-                var color = getCategoryColor(cat);
-                var isActive = currentCategoryFilter === cat ? 'active' : '';
-                html += '<button class="filter-btn ' + isActive + '" style="' +
-                        (isActive ? 'background:' + color + '; border-color:' + color + ';' : '') +
-                        '" onclick="setCategoryFilter(\'' + cat.replace(/'/g, "\\'") + '\')">' + cat + '</button>';
-            });
-            container.innerHTML = html;
-        }
+function renderFilters() {
+    var container = document.getElementById('filters');
+    var allTagsSet = {};
 
-        function setCategoryFilter(category) {
-            currentCategoryFilter = category;
-            renderFilters();
-            loadNotes();
-        }
+    // Собираем все теги из существующих заметок
+    allCategories.forEach(function(cat) {
+        parseTags(cat).forEach(function(tag) {
+            allTagsSet[tag.toLowerCase()] = true;
+        });
+    });
 
-        function onCategoryInput() {
-            var input = document.getElementById('category');
-            var suggestions = document.getElementById('category-suggestions');
-            var value = input.value.toLowerCase().trim();
-            if (!value) { suggestions.classList.remove('show'); return; }
-            var allCats = defaultCategories.concat(allCategories);
-            allCats = allCats.filter(function(c, i, arr) { return arr.indexOf(c) === i; });
-            var matches = allCats.filter(function(c) {
-                return c.toLowerCase().startsWith(value) && c.toLowerCase() !== value;
-            });
-            if (matches.length === 0) { suggestions.classList.remove('show'); return; }
-            suggestions.innerHTML = matches.map(function(c) {
-                return '<div class="category-suggestion" onclick="selectCategory(\'' + c.replace(/'/g, "\\'") + '\')">' + c + '</div>';
-            }).join('');
-            suggestions.classList.add('show');
-        }
+    var allTags = Object.keys(allTagsSet).sort();
 
-        function selectCategory(category) {
-            document.getElementById('category').value = category;
-            document.getElementById('category-suggestions').classList.remove('show');
-        }
+    // Кнопка "Все"
+    var html = '<button class="filter-btn ' + (currentCategoryFilter === '' ? 'active' : '') + '" onclick="setCategoryFilter(\'\')">Все</button>';
+
+    // Кнопки для каждого тега
+    allTags.forEach(function(tag) {
+        var isActive = currentCategoryFilter.toLowerCase() === tag ? 'active' : '';
+        html += '<button class="filter-btn ' + isActive + '" onclick="setCategoryFilter(\'' + tag.replace(/'/g, "\\'") + '\')">' + tag + '</button>';
+    });
+
+    container.innerHTML = html;
+}
+
+function setCategoryFilter(tag) {
+    currentCategoryFilter = tag === undefined ? '' : tag; // Жесткий сброс в пустую строку
+    renderFilters();
+    loadNotes();
+}
+
+function onCategoryInput() {
+    var input = document.getElementById('category');
+    var suggestions = document.getElementById('category-suggestions');
+    var value = input.value.toLowerCase().trim();
+
+    // Получаем последний введённый тег (если пользователь вводит несколько через запятую)
+    var parts = value.split(',');
+    var lastPart = parts[parts.length - 1].trim();
+
+    if (!lastPart) {
+        suggestions.classList.remove('show');
+        return;
+    }
+
+    // Собираем все существующие теги
+    var allTags = [];
+    allCategories.forEach(function(cat) {
+        parseTags(cat).forEach(function(tag) {
+            if (allTags.indexOf(tag) === -1) {
+                allTags.push(tag);
+            }
+        });
+    });
+
+    // Фильтруем по введённому тексту
+    var matches = allTags.filter(function(tag) {
+        return tag.toLowerCase().startsWith(lastPart) && tag.toLowerCase() !== lastPart;
+    });
+
+    if (matches.length === 0) {
+        suggestions.classList.remove('show');
+        return;
+    }
+
+    suggestions.innerHTML = matches.map(function(tag) {
+        return '<div class="category-suggestion" onclick="selectCategory(\'' + tag.replace(/'/g, "\\'") + '\')">' + tag + '</div>';
+    }).join('');
+    suggestions.classList.add('show');
+}
+
+function selectCategory(tag) {
+    var input = document.getElementById('category');
+    var parts = input.value.split(',');
+    parts[parts.length - 1] = tag;  // Заменяем последний введённый тег
+    input.value = parts.join(', ') + ', ';  // Добавляем запятую для следующего тега
+    document.getElementById('category-suggestions').classList.remove('show');
+    input.focus();
+}
 
         document.addEventListener('click', function(e) {
             if (!e.target.closest('.category-input-wrapper')) {
@@ -1426,27 +1463,38 @@ function checkAuth() {
             removeImagePreview();
         }
 
- function loadNotes() {
+function loadNotes() {
     hideMessages();
     var query = document.getElementById('search').value;
     var params = [];
-    if (query) params.push('q=' + encodeURIComponent(query));
-    if (currentCategoryFilter) params.push('category=' + encodeURIComponent(currentCategoryFilter));
+
+    // Безопасная проверка параметров
+    if (query && query.trim() !== '') params.push('q=' + encodeURIComponent(query.trim()));
+    if (currentCategoryFilter && currentCategoryFilter.trim() !== '') {
+        params.push('tag=' + encodeURIComponent(currentCategoryFilter.trim()));
+    }
+
     var url = '/notes' + (params.length ? '?' + params.join('&') : '');
+    console.log('Загружаю заметки по URL:', url);
+
     fetch(url, {credentials: 'include'})
     .then(function(response) {
         if (response.status === 401) {
             showError('Сессия истекла, войди снова');
-            eraseCookie('session_id'); location.reload();
+            eraseCookie('session_id');
+            location.reload();
             return [];
         }
         return response.json();
     })
     .then(function(notes) {
+        console.log('Получено заметок:', notes ? notes.length : 0);
         if (!notes) return;
-        var container = document.getElementById('notes');
 
-        // Счётчик заметок
+        var container = document.getElementById('notes');
+        if (!container) return;
+
+        // Счётчик
         var counterHtml = '<div class="notes-counter">' +
             '<span>📋 Всего: <strong>' + notes.length + '</strong> ' +
             (notes.length === 1 ? 'заметка' : (notes.length < 5 ? 'заметки' : 'заметок')) + '</span>' +
@@ -1458,48 +1506,55 @@ function checkAuth() {
             return;
         }
 
+        // ГЕНЕРАЦИЯ HTML (УПРОЩЕННАЯ И БЕЗОПАСНАЯ)
         var notesHtml = notes.map(function(n) {
             var date = new Date(n.created_at).toLocaleString('ru-RU');
-            var categoryHtml = n.category ? '<span class="category-badge" style="background:' + getCategoryColor(n.category) + '">' + n.category + '</span>' : '';
 
+            // Безопасная обработка тегов
+            var tagsHtml = '';
+            if (n.category && n.category.trim() !== '') {
+                var tags = parseTags(n.category);
+                tagsHtml = tags.map(function(tag) {
+                    return '<span class="category-badge" style="background:#e0f7fa; color:#00838f; border:1px solid #b2ebf2; cursor:pointer; margin-right:4px; font-size:11px; padding:2px 8px; border-radius:10px;" onclick="event.stopPropagation(); setCategoryFilter(\'' + tag.replace(/'/g, "\\'") + '\')">' + tag + '</span>';
+                }).join('');
+            }
+
+            // Иконки доступа
             var accessIcon = '';
             var ownerInfo = '';
             if (n.user_id === currentUserId) {
-                if (n.is_public == 1) {
-                    accessIcon = '<span class="access-icon" title="Общая заметка">🌐</span>';
-                }
+                if (n.is_public == 1) accessIcon = '<span class="access-icon" title="Общая">🌐</span>';
             } else {
-                ownerInfo = '<span class="note-owner">от ' + (n.owner_username || 'неизвестно') + '</span>';
-                if (n.is_public == 1) {
-                    accessIcon = '<span class="access-icon" title="Общая заметка">🌐</span>';
-                } else {
-                    accessIcon = '<span class="access-icon" title="Поделились со мной">👥</span>';
-                }
+                ownerInfo = '<span class="note-owner">от ' + (n.owner_username || '?') + '</span>';
+                accessIcon = n.is_public == 1 ? '<span class="access-icon" title="Общая"></span>' : '<span class="access-icon" title="Доступ"></span>';
             }
 
+            // Превью текста
             var previewText = n.content || '';
             var preview = previewText.length > 120 ? previewText.substring(0, 120) + '...' : previewText;
-            var fullEscaped = (n.content || '').replace(/'/g, "\\'");
+
+            // Фото (если есть)
             var thumbHtml = n.image ? '<img class="note-thumb" src="/uploads/' + n.image + '" onclick="event.stopPropagation(); openImageModal(\'/uploads/' + n.image + '\')">' : '';
             var largeHtml = n.image ? '<img class="note-thumb-large" src="/uploads/' + n.image + '" onclick="event.stopPropagation(); openImageModal(\'/uploads/' + n.image + '\')">' : '';
 
-            // ПРАВИЛЬНОЕ экранирование для HTML-атрибутов (кавычки И переносы строк)
-            var titleEscaped = n.title.replace(/'/g, "\\'").replace(/\n/g, "\\n").replace(/\r/g, "");
-            var fullEscaped = (n.content || '').replace(/'/g, "\\'").replace(/\n/g, "\\n").replace(/\r/g, "");
-            var categoryEscaped = (n.category || '').replace(/'/g, "\\'").replace(/\n/g, "\\n").replace(/\r/g, "");
-            var imageEscaped = (n.image || '').replace(/'/g, "\\'").replace(/\n/g, "\\n").replace(/\r/g, "");
+            // Экранирование для JS
+            var tEsc = (n.title||'').replace(/'/g, "\\'").replace(/\n/g, "\\n");
+            var cEsc = (n.content||'').replace(/'/g, "\\'").replace(/\n/g, "\\n");
+            var catEsc = (n.category||'').replace(/'/g, "\\'");
+            var imgEsc = (n.image||'').replace(/'/g, "\\'");
 
-            var editButton = n.user_id === currentUserId ?
-                '<button class="btn-edit" onclick="event.stopPropagation(); editNote(' + n.id + ', \'' + titleEscaped + '\', \'' + fullEscaped + '\', \'' + categoryEscaped + '\', \'' + imageEscaped + '\', ' + (n.is_public || 0) + ')">Изменить</button>' : '';
+            // Кнопки (только для владельца)
+            var isOwner = n.user_id === currentUserId;
+            var buttonsHtml = '';
+            if (isOwner) {
+                buttonsHtml += '<button class="btn-edit" onclick="event.stopPropagation(); editNote(' + n.id + ', \'' + tEsc + '\', \'' + cEsc + '\', \'' + catEsc + '\', \'' + imgEsc + '\', ' + (n.is_public||0) + ')">Изменить</button>';
+                buttonsHtml += '<button class="btn-delete" onclick="event.stopPropagation(); deleteNote(' + n.id + ')">Удалить</button>';
+                buttonsHtml += '<button class="btn-share" style="flex:none; width:auto; padding:5px 10px; font-size:12px; background:#9C27B0 !important; opacity:0.85;" onclick="event.stopPropagation(); openShareModal(' + n.id + ')">Поделиться</button>';
+            }
 
-            var deleteButton = n.user_id === currentUserId ?
-                '<button class="btn-delete" onclick="event.stopPropagation(); deleteNote(' + n.id + ')">Удалить</button>' : '';
-
-            var shareButton = n.user_id === currentUserId ?
-                '<button class="btn-share" style="flex:none; width:auto; padding:5px 10px; font-size:12px; background:#9C27B0 !important; opacity:0.85;" onclick="event.stopPropagation(); openShareModal(' + n.id + ')"> Поделиться</button>' : '';
-
-            return '<div class="note" style="border-left-color:' + (n.category ? getCategoryColor(n.category) : '#ccc') + '" onclick="toggleNote(this, event)">' +
-                '<div class="meta">' + categoryHtml + accessIcon + ownerInfo + '<span class="date">' + date + '</span><span class="toggle-arrow">▼</span></div>' +
+            // СБОРКА КАРТОЧКИ (ЦВЕТ ПОЛОСКИ ВСЕГДА ГОЛУБОЙ ДЛЯ СТАБИЛЬНОСТИ)
+            return '<div class="note" style="border-left-color: #00bcd4" onclick="toggleNote(this, event)">' +
+                '<div class="meta">' + tagsHtml + accessIcon + ownerInfo + '<span class="date">' + date + '</span><span class="toggle-arrow">▼</span></div>' +
                 '<h3>' + n.title + '</h3>' +
                 '<div class="note-image-container">' +
                     '<div class="note-text-container">' +
@@ -1509,16 +1564,16 @@ function checkAuth() {
                     thumbHtml +
                 '</div>' +
                 largeHtml +
-                '<div class="buttons">' +
-                    editButton +
-                    deleteButton +
-                    shareButton +
-                '</div></div>';
+                '<div class="buttons">' + buttonsHtml + '</div>' +
+            '</div>';
         }).join('');
 
         container.innerHTML = counterHtml + notesHtml;
     })
-    .catch(function() { showError('Ошибка загрузки заметок'); });
+    .catch(function(err) {
+        console.error('Ошибка загрузки:', err);
+        showError('Ошибка загрузки заметок');
+    });
 }
 
 function toggleNote(element, event) {

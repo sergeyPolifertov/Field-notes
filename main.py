@@ -2,12 +2,13 @@ from database import (
     create_user, get_user_by_username, get_user_by_email, get_user_by_id, get_all_users,
     create_session, get_session, delete_session,
     create_reset_token, get_user_by_reset_token, delete_reset_token, update_user_password,
-    get_all_notes_for_user, get_notes_by_category_for_user, search_notes_for_user, get_all_categories,
+    get_all_notes_for_user, search_notes_for_user, get_all_categories,
+    get_notes_by_tag_for_user,  # ← ДОБАВЬ ЭТУ СТРОКУ
     add_note, delete_note, update_note, get_note_by_id, get_note_image,
     share_note_with_users, get_shared_users, set_note_public,
     get_profile, create_profile, update_profile,
     set_admin, is_admin, get_stats, get_all_users_with_stats, delete_user,
-    get_connection# ← ДОБАВЛЕНО
+    get_connection
 )
 import os
 import uuid
@@ -436,11 +437,20 @@ def get_categories(session_id: Optional[str] = Cookie(None)):
 
 
 @app.get("/notes")
-def get_notes(session_id: Optional[str] = Cookie(None), q: str = "", category: str = ""):
+def get_notes(q: str = "", tag: str = "", session_id: Optional[str] = Cookie(None)):
     user = get_current_user(session_id)
-    if not user: raise HTTPException(status_code=401, detail="Не авторизован")
-    if q.strip(): return search_notes_for_user(user['id'], q.strip(), category)
-    return get_notes_by_category_for_user(user['id'], category)
+    if not user:
+        raise HTTPException(status_code=401, detail="Не авторизован")
+
+    # ИСПРАВЛЕНИЕ: Если тег пустой или состоит из пробелов — игнорируем его
+    if tag and tag.strip():
+        notes = get_notes_by_tag_for_user(user['id'], tag.strip())
+    elif q and q.strip():
+        notes = search_notes_for_user(user['id'], q.strip())
+    else:
+        notes = get_all_notes_for_user(user['id'])
+
+    return notes
 
 
 @app.post("/notes")

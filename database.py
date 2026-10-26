@@ -319,6 +319,29 @@ def get_notes_by_category_for_user(user_id: int, category: str):
     return notes
 
 
+def get_notes_by_tag_for_user(user_id: int, tag: str):
+    """Найти заметки по тегу (гарантированный регистронезависимый поиск)"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Приводим искомый тег к нижнему регистру НА СТОРОНЕ PYTHON
+    search_tag = f"%{tag.lower().strip()}%"
+
+    cursor.execute('''
+        SELECT DISTINCT n.*, u.username AS owner_username
+        FROM notes n
+        LEFT JOIN users u ON n.user_id = u.id
+        WHERE (n.user_id = ? OR COALESCE(n.is_public, 0) = 1
+               OR n.id IN (SELECT note_id FROM shared_notes WHERE shared_with_user_id = ?))
+          AND LOWER(COALESCE(n.category, '')) LIKE ?
+        ORDER BY n.created_at DESC
+    ''', (user_id, user_id, search_tag))
+
+    notes = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return notes
+
+
 def search_notes_for_user(user_id: int, query: str, category: str = ""):
     conn = get_connection()
     cursor = conn.cursor()
@@ -350,6 +373,7 @@ def search_notes_for_user(user_id: int, query: str, category: str = ""):
 
 
 def get_all_categories(user_id: int):
+    """Получить все уникальные теги из заметок пользователя"""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute('''
@@ -358,16 +382,31 @@ def get_all_categories(user_id: int):
         LEFT JOIN shared_notes s ON n.id = s.note_id
         WHERE (n.user_id = ? OR COALESCE(n.is_public, 0) = 1 OR s.shared_with_user_id = ?)
           AND n.category != ""
-        ORDER BY n.category
     ''', (user_id, user_id))
-    categories = [row['category'] for row in cursor.fetchall()]
+
+    all_tags = set()
+    for row in cursor.fetchall():
+        cat = row['category']
+        if cat:
+            # Разбиваем строку тегов по запятой и добавляем каждый тег
+            for tag in cat.split(','):
+                tag = tag.strip().lower()
+                if tag:
+                    all_tags.add(tag)
+
     conn.close()
-    return categories
+    return sorted(list(all_tags))
 
 
 def add_note(user_id: int, title: str, content: str, category: str = "", image: str = "", is_public: int = 0):
     conn = get_connection()
     cursor = conn.cursor()
+
+    # Приводим все теги к нижнему регистру при сохранении
+    if category:
+        tags = [tag.strip().lower() for tag in category.split(',') if tag.strip()]
+        category = ', '.join(tags)
+
     cursor.execute(
         'INSERT INTO notes (user_id, title, content, category, image, is_public) VALUES (?, ?, ?, ?, ?, ?)',
         (user_id, title, content, category, image, is_public)
@@ -398,6 +437,12 @@ def update_note(note_id: int, user_id: int, title: str, content: str,
                 category: str = "", image: str = "", is_public: int = None):
     conn = get_connection()
     cursor = conn.cursor()
+
+    # Приводим все теги к нижнему регистру при обновлении
+    if category:
+        tags = [tag.strip().lower() for tag in category.split(',') if tag.strip()]
+        category = ', '.join(tags)
+
     if is_public is not None:
         cursor.execute(
             '''UPDATE notes
